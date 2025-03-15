@@ -1,0 +1,7 @@
+server:
+  port: 9090
+
+gg:
+  jte:
+    development-mode: true
+    template-location: src/main/resources/templates/

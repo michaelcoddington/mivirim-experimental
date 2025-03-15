@@ -14,6 +14,7 @@
         <module>client-application-starter</module>
         <module>dam-domain-graph</module>
         <module>product-domain-graph</module>
+        <module>dam-client-application</module>
     </modules>
 
     <properties>
