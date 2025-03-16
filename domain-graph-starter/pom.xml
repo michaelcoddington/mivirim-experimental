@@ -53,7 +53,6 @@
             <groupId>org.janusgraph</groupId>
             <artifactId>janusgraph-inmemory</artifactId>
             <version>${janusgraph.version}</version>
-            <scope>test</scope>
         </dependency>
 
         <dependency>

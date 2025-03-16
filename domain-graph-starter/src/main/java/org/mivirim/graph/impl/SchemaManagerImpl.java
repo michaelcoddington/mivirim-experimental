@@ -1,13 +1,21 @@
 package org.mivirim.graph.impl;
 
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.apache.tinkerpop.gremlin.process.traversal.dsl.graph.GraphTraversalSource;
+import org.mivirim.graph.DuplicateException;
 import org.mivirim.graph.SchemaManager;
 import org.mivirim.graph.schema.EntitySchema;
 import org.mivirim.graph.schema.RelationshipSchema;
 
+import java.util.NoSuchElementException;
 import java.util.Optional;
 
+import static org.mivirim.graph.LabelConstants.SCHEMA_LABEL;
+
 public class SchemaManagerImpl implements SchemaManager {
+
+    private static final Logger LOG = LogManager.getLogger(SchemaManagerImpl.class);
 
     private GraphTraversalSource traversalSource;
 
@@ -17,7 +25,18 @@ public class SchemaManagerImpl implements SchemaManager {
 
     @Override
     public void createEntitySchema(EntitySchema schema) {
-        throw new RuntimeException("not done");
+        var tx = traversalSource.tx();
+        try {
+            traversalSource.V().hasLabel(SCHEMA_LABEL).has("name", schema.getName()).next();
+            throw new DuplicateException(String.format("Schema %s already exists", schema.getName()));
+        } catch (NoSuchElementException er) {
+            traversalSource.addV(SCHEMA_LABEL)
+                    .property("name", schema.getName())
+                    .next();
+        } finally {
+            tx.commit();
+            tx.close();
+        }
     }
 
     @Override
