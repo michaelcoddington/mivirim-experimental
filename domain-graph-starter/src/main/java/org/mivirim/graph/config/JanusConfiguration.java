@@ -1,4 +1,4 @@
-package org.mivirim.graph.impl;
+package org.mivirim.graph.config;
 
 import org.apache.tinkerpop.gremlin.process.traversal.dsl.graph.GraphTraversalSource;
 import org.janusgraph.core.JanusGraph;
