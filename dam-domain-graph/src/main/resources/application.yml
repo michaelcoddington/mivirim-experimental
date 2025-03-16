@@ -5,5 +5,19 @@ spring:
   application:
     name: dam-domain-graph
 
+management:
+  health:
+    cassandra:
+      enabled: false
+  endpoints:
+    web:
+      exposure:
+        include:
+          - health
+          - info
+
+eureka.instance:
+  hostname: localhost
+
 graph:
   backend: berkeley
