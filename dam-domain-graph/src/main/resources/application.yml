@@ -4,6 +4,9 @@ server:
 spring:
   application:
     name: dam-domain-graph
+  threads:
+    virtual:
+      enabled: true
 
 management:
   health:
