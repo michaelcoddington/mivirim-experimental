@@ -13,7 +13,15 @@ public class JanusConfiguration {
 
     @Bean
     @ConditionalOnMissingBean
-    JanusGraph berkeleyGraph() {
+    public JanusGraph inMemoryGraph() {
+        return JanusGraphFactory.build()
+                .set("storage.backend", "inmemory")
+                .open();
+    }
+
+    @Bean
+    @ConditionalOnProperty(value = "graph.backend", havingValue = "berkeley")
+    public JanusGraph berkeleyGraph() {
         return JanusGraphFactory.build()
                 .set("storage.backend", "berkeleyje")
                 .set("storage.directory", "db/berkeleyje")
@@ -24,7 +32,7 @@ public class JanusConfiguration {
 
     @Bean
     @ConditionalOnProperty(value = "graph.backend", havingValue = "cassandra")
-    JanusGraph cassandraGraph() {
+    public JanusGraph cassandraGraph() {
         return JanusGraphFactory.build().
                 set("storage.backend", "cql")
                 .set("storage.hostname", "localhost")
@@ -32,7 +40,7 @@ public class JanusConfiguration {
     }
 
     @Bean
-    GraphTraversalSource traversalSource(JanusGraph graph) {
+    public GraphTraversalSource traversalSource(JanusGraph graph) {
         return graph.traversal();
     }
 
