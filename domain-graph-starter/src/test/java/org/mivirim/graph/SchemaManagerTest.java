@@ -9,10 +9,11 @@ import org.mivirim.graph.impl.SchemaManagerImpl;
 import org.mivirim.graph.schema.EntitySchema;
 import org.mivirim.graph.schema.StringProperty;
 
+import java.util.Optional;
 import java.util.Set;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.mivirim.graph.LabelConstants.SCHEMA_LABEL;
 
 public class SchemaManagerTest {
 
@@ -27,7 +28,7 @@ public class SchemaManagerTest {
     }
 
     @Test
-    @DisplayName("create entity schema")
+    @DisplayName("create and retrieve entity schema")
     void testCreateEntitySchema() {
         EntitySchema entitySchema = new EntitySchema();
         entitySchema.setName("Product");
@@ -36,8 +37,9 @@ public class SchemaManagerTest {
         entitySchema.setProperties(Set.of(isbnProperty));
         schemaManager.createEntitySchema(entitySchema);
 
-        var iterator = traversalSource.V().hasLabel(SCHEMA_LABEL).has("name", "Product");
-        assertTrue(iterator.hasNext(), String.format("Expected to find entity schema %s", entitySchema.getName()));
+        Optional<EntitySchema> schemaOpt = schemaManager.retrieveEntitySchema("Product");
+        assertTrue(schemaOpt.isPresent(), "Schema not returned");
+        assertEquals(entitySchema, schemaOpt.get());
     }
 
 }
