@@ -16,10 +16,11 @@
         <maven.compiler.target>21</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
 
-        <janusgraph.version>1.1.1-20241118-163713.4b9d009</janusgraph.version>
-        <tinkerpop.version>3.7.3</tinkerpop.version>
         <commons.lang3.version>3.13.0</commons.lang3.version>
         <eureka.version>4.2.0</eureka.version>
+        <janusgraph.version>1.1.1-20241118-163713.4b9d009</janusgraph.version>
+        <netflix.dgs.version>10.0.3</netflix.dgs.version>
+        <tinkerpop.version>3.7.3</tinkerpop.version>
     </properties>
 
     <dependencies>
@@ -41,9 +42,7 @@
         </dependency>
 
 
-
         <!-- Graph stuff -->
-
         <dependency>
             <groupId>org.janusgraph</groupId>
             <artifactId>janusgraph-core</artifactId>
@@ -105,6 +104,12 @@
             <version>${eureka.version}</version>
         </dependency>
 
+        <!-- Netflix Domain Graph Service -->
+        <dependency>
+            <groupId>com.netflix.graphql.dgs</groupId>
+            <artifactId>graphql-dgs-spring-graphql-starter</artifactId>
+            <version>${netflix.dgs.version}</version>
+        </dependency>
 
     </dependencies>
 
