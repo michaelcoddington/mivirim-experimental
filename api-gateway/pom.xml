@@ -17,6 +17,7 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
 
         <eureka.version>4.2.0</eureka.version>
+        <netflix.dgs.version>10.0.3</netflix.dgs.version>
     </properties>
 
     <dependencies>
@@ -43,6 +44,13 @@
             <groupId>org.springframework.cloud</groupId>
             <artifactId>spring-cloud-starter-netflix-eureka-server</artifactId>
             <version>${eureka.version}</version>
+        </dependency>
+
+        <!-- Netflix Domain Graph Service -->
+        <dependency>
+            <groupId>com.netflix.graphql.dgs</groupId>
+            <artifactId>graphql-dgs-spring-graphql-starter</artifactId>
+            <version>${netflix.dgs.version}</version>
         </dependency>
 
 
