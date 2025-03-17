@@ -1,18 +1,21 @@
-package org.mivirim.graph.impl;
+package org.mivirim.graph.schema.impl;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.tinkerpop.gremlin.process.traversal.dsl.graph.GraphTraversalSource;
 import org.mivirim.graph.DuplicateException;
-import org.mivirim.graph.SchemaManager;
+import org.mivirim.graph.schema.SchemaManager;
 import org.mivirim.graph.schema.EntitySchema;
 import org.mivirim.graph.schema.RelationshipSchema;
+import org.springframework.stereotype.Service;
 
 import java.util.NoSuchElementException;
 import java.util.Optional;
+import java.util.Set;
 
 import static org.mivirim.graph.LabelConstants.SCHEMA_LABEL;
 
+@Service
 public class SchemaManagerImpl implements SchemaManager {
 
     private static final Logger LOG = LogManager.getLogger(SchemaManagerImpl.class);
@@ -21,6 +24,13 @@ public class SchemaManagerImpl implements SchemaManager {
 
     public SchemaManagerImpl(GraphTraversalSource traversalSource) {
         this.traversalSource = traversalSource;
+    }
+
+    @Override
+    public Set<EntitySchema> retrieveEntitySchemas() {
+        EntitySchema coverSchema = new EntitySchema();
+        coverSchema.setName("Cover");
+        return Set.of(coverSchema);
     }
 
     @Override
@@ -33,6 +43,7 @@ public class SchemaManagerImpl implements SchemaManager {
             traversalSource.addV(SCHEMA_LABEL)
                     .property("name", schema.getName())
                     .next();
+            LOG.info("Created schema {}", schema);
         } finally {
             tx.commit();
             tx.close();
@@ -52,6 +63,11 @@ public class SchemaManagerImpl implements SchemaManager {
     @Override
     public void deleteEntitySchema(EntitySchema schema) {
         throw new RuntimeException("not done");
+    }
+
+    @Override
+    public Set<RelationshipSchema> retrieveRelationshipSchemas() {
+        return Set.of();
     }
 
     @Override

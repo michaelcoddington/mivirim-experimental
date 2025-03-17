@@ -1,13 +1,11 @@
-package org.mivirim.graph;
+package org.mivirim.graph.schema;
 
 import org.apache.tinkerpop.gremlin.process.traversal.dsl.graph.GraphTraversalSource;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import org.mivirim.graph.config.JanusConfiguration;
-import org.mivirim.graph.impl.SchemaManagerImpl;
-import org.mivirim.graph.schema.EntitySchema;
-import org.mivirim.graph.schema.StringProperty;
+import org.mivirim.graph.JanusAutoConfiguration;
+import org.mivirim.graph.schema.impl.SchemaManagerImpl;
 
 import java.util.Optional;
 import java.util.Set;
@@ -22,8 +20,8 @@ public class SchemaManagerTest {
 
     @BeforeEach
     void setup() {
-        JanusConfiguration janusConfiguration = new JanusConfiguration();
-        traversalSource = janusConfiguration.traversalSource(janusConfiguration.inMemoryGraph());
+        JanusAutoConfiguration janusAutoConfiguration = new JanusAutoConfiguration();
+        traversalSource = janusAutoConfiguration.traversalSource(janusAutoConfiguration.inMemoryGraph());
         schemaManager = new SchemaManagerImpl(traversalSource);
     }
 

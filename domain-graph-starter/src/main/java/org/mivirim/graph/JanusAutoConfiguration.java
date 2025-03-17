@@ -1,4 +1,4 @@
-package org.mivirim.graph.config;
+package org.mivirim.graph;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -11,9 +11,9 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 @Configuration
-public class JanusConfiguration {
+public class JanusAutoConfiguration {
 
-    private static final Logger LOG = LogManager.getLogger(JanusConfiguration.class);
+    private static final Logger LOG = LogManager.getLogger(JanusAutoConfiguration.class);
 
     @Bean
     @ConditionalOnProperty(value = "graph.backend", havingValue = "berkeley")

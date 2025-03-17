@@ -14,7 +14,7 @@ Configuration:
 
   Loggers:
     Root:
-      level: WARN
+      level: INFO
       AppenderRef:
         - ref: Console_Appender
     logger:

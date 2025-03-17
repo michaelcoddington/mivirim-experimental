@@ -4,7 +4,6 @@ import org.apache.tinkerpop.gremlin.process.traversal.dsl.graph.GraphTraversalSo
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import org.mivirim.graph.config.JanusConfiguration;
 import org.mivirim.graph.impl.GraphManagerImpl;
 
 import static org.junit.jupiter.api.Assertions.fail;
@@ -16,8 +15,8 @@ public class TraversalTest {
 
     @BeforeEach
     void setup() {
-        JanusConfiguration janusConfiguration = new JanusConfiguration();
-        traversalSource = janusConfiguration.traversalSource(janusConfiguration.inMemoryGraph());
+        JanusAutoConfiguration janusAutoConfiguration = new JanusAutoConfiguration();
+        traversalSource = janusAutoConfiguration.traversalSource(janusAutoConfiguration.inMemoryGraph());
         graphManager = new GraphManagerImpl(traversalSource);
         graphManager.resetGraph();
     }

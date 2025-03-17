@@ -18,6 +18,7 @@
 
         <commons.lang3.version>3.13.0</commons.lang3.version>
         <eureka.version>4.2.0</eureka.version>
+        <hazelcast.version>5.5.0</hazelcast.version>
         <janusgraph.version>1.1.1-20241118-163713.4b9d009</janusgraph.version>
         <netflix.dgs.version>10.0.3</netflix.dgs.version>
         <tinkerpop.version>3.7.3</tinkerpop.version>
@@ -115,6 +116,18 @@
             <version>${netflix.dgs.version}</version>
         </dependency>
 
+        <!-- Hazelcast -->
+        <!-- https://mvnrepository.com/artifact/com.hazelcast/hazelcast -->
+        <dependency>
+            <groupId>com.hazelcast</groupId>
+            <artifactId>hazelcast</artifactId>
+            <version>${hazelcast.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.hazelcast</groupId>
+            <artifactId>hazelcast-spring</artifactId>
+            <version>${hazelcast.version}</version>
+        </dependency>
     </dependencies>
 
 </project>
