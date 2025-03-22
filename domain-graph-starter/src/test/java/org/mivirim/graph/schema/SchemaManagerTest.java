@@ -28,16 +28,32 @@ public class SchemaManagerTest {
     @Test
     @DisplayName("create and retrieve entity schema")
     void testCreateEntitySchema() {
-        EntitySchema entitySchema = new EntitySchema();
-        entitySchema.setName("Product");
-        StringProperty isbnProperty = new StringProperty();
-        isbnProperty.setName("ISBN");
-        entitySchema.setProperties(Set.of(isbnProperty));
-        schemaManager.createEntitySchema(entitySchema);
+        EntityDefinition entityDefinition = new EntityDefinition();
+        entityDefinition.setName("Product");
 
-        Optional<EntitySchema> schemaOpt = schemaManager.retrieveEntitySchema("Product");
+        PropertyDefinition isbnPropertyDefinition = new PropertyDefinition();
+        isbnPropertyDefinition.setName("ISBN");
+        isbnPropertyDefinition.setType(PropertyType.STRING);
+
+        PropertyDefinition titlePropertyDefinition = new PropertyDefinition();
+        titlePropertyDefinition.setName("Title");
+        titlePropertyDefinition.setType(PropertyType.STRING);
+
+        PropertyGroupDefinition levelGroupDefinition = new PropertyGroupDefinition();
+        levelGroupDefinition.setName("Levels");
+
+        PropertyDefinition graLevelDefinition = new PropertyDefinition();
+        graLevelDefinition.setName("GRA");
+        graLevelDefinition.setType(PropertyType.STRING);
+        levelGroupDefinition.setProperties(Set.of(graLevelDefinition));
+        entityDefinition.setPropertyGroups(Set.of(levelGroupDefinition));
+
+        entityDefinition.setProperties(Set.of(isbnPropertyDefinition, titlePropertyDefinition));
+        schemaManager.createEntitySchema(entityDefinition);
+
+        Optional<EntityDefinition> schemaOpt = schemaManager.retrieveEntitySchema("Product");
         assertTrue(schemaOpt.isPresent(), "Schema not returned");
-        assertEquals(entitySchema, schemaOpt.get());
+        assertEquals(entityDefinition, schemaOpt.get());
     }
 
 }

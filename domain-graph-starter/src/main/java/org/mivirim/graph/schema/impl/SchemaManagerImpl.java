@@ -2,16 +2,27 @@ package org.mivirim.graph.schema.impl;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.apache.tinkerpop.gremlin.process.traversal.dsl.graph.GraphTraversal;
 import org.apache.tinkerpop.gremlin.process.traversal.dsl.graph.GraphTraversalSource;
+import org.apache.tinkerpop.gremlin.process.traversal.dsl.graph.__;
+import org.apache.tinkerpop.gremlin.structure.Vertex;
 import org.mivirim.graph.DuplicateException;
+import org.mivirim.graph.LabelConstants;
+import org.mivirim.graph.schema.EntityDefinition;
+import org.mivirim.graph.schema.PropertyDefinition;
+import org.mivirim.graph.schema.PropertyType;
+import org.mivirim.graph.schema.RelationshipDefinition;
 import org.mivirim.graph.schema.SchemaManager;
-import org.mivirim.graph.schema.EntitySchema;
-import org.mivirim.graph.schema.RelationshipSchema;
 import org.springframework.stereotype.Service;
 
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Optional;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import static org.mivirim.graph.LabelConstants.SCHEMA_LABEL;
 
@@ -27,22 +38,34 @@ public class SchemaManagerImpl implements SchemaManager {
     }
 
     @Override
-    public Set<EntitySchema> retrieveEntitySchemas() {
-        EntitySchema coverSchema = new EntitySchema();
+    public Set<EntityDefinition> retrieveEntitySchemas() {
+        EntityDefinition coverSchema = new EntityDefinition();
         coverSchema.setName("Cover");
         return Set.of(coverSchema);
     }
 
     @Override
-    public void createEntitySchema(EntitySchema schema) {
+    public void createEntitySchema(EntityDefinition schema) {
         var tx = traversalSource.tx();
         try {
             traversalSource.V().hasLabel(SCHEMA_LABEL).has("name", schema.getName()).next();
             throw new DuplicateException(String.format("Schema %s already exists", schema.getName()));
         } catch (NoSuchElementException er) {
-            traversalSource.addV(SCHEMA_LABEL)
-                    .property("name", schema.getName())
-                    .next();
+            GraphTraversal<Vertex, ?> v = traversalSource.addV(SCHEMA_LABEL)
+                    .property("name", schema.getName()).as("schema");
+            Set<String> propertyVertexRefs = new HashSet<>();
+            for (PropertyDefinition p: schema.getProperties()) {
+                String ref = String.valueOf(propertyVertexRefs.size());
+                propertyVertexRefs.add(ref);
+                v = v.addV(LabelConstants.SCHEMA_PROPERTY_LABEL)
+                        .property("name", p.getName())
+                        .property("type", p.getType().toString())
+                        .as(ref);
+                v = v.addE("has-property")
+                        .from("schema").to(ref);
+
+            }
+            v.next();
             LOG.info("Created schema {}", schema);
         } finally {
             tx.commit();
@@ -51,42 +74,68 @@ public class SchemaManagerImpl implements SchemaManager {
     }
 
     @Override
-    public void updateEntitySchema(EntitySchema schema) {
+    public void updateEntitySchema(EntityDefinition schema) {
         throw new RuntimeException("not done");
     }
 
     @Override
-    public Optional<EntitySchema> retrieveEntitySchema(String name) {
+    public Optional<EntityDefinition> retrieveEntitySchema(String name) {
+        GraphTraversal<Vertex, Map<String, Object>> iter = traversalSource.V()
+                .hasLabel(SCHEMA_LABEL)
+                .has("name", name)
+                .project("elements", "propertyNodes")
+                .by(__.elementMap())
+                .by(__.out("has-property").elementMap().fold());
+        if (iter.hasNext()) {
+            Map<String, Object> v = iter.next();
+            EntityDefinition schema = new EntityDefinition();
+            var propertyMap = (HashMap) v.get("elements");
+            schema.setName((String) propertyMap.get("name"));
+
+            ArrayList<Map<String, Object>> properties = (ArrayList) v.get("propertyNodes");
+
+            Set<PropertyDefinition> schemaProps = properties.stream()
+                    .map(map -> {
+                        PropertyDefinition p = new PropertyDefinition();
+                        p.setName((String) map.get("name"));
+                        p.setType(PropertyType.valueOf((String) map.get("type")));
+                        return p;
+                    }).collect(Collectors.toSet());
+            schema.setProperties(schemaProps);
+
+            return Optional.of(schema);
+        } else {
+            return Optional.empty();
+        }
+    }
+
+    @Override
+    public void deleteEntitySchema(EntityDefinition schema) {
         throw new RuntimeException("not done");
     }
 
     @Override
-    public void deleteEntitySchema(EntitySchema schema) {
-        throw new RuntimeException("not done");
-    }
-
-    @Override
-    public Set<RelationshipSchema> retrieveRelationshipSchemas() {
+    public Set<RelationshipDefinition> retrieveRelationshipSchemas() {
         return Set.of();
     }
 
     @Override
-    public void createRelationshipSchema(RelationshipSchema schema) {
+    public void createRelationshipSchema(RelationshipDefinition schema) {
         throw new RuntimeException("not done");
     }
 
     @Override
-    public void updateRelationshipSchema(RelationshipSchema schema) {
+    public void updateRelationshipSchema(RelationshipDefinition schema) {
         throw new RuntimeException("not done");
     }
 
     @Override
-    public Optional<RelationshipSchema> retrieveRelationshipSchema(String name) {
+    public Optional<RelationshipDefinition> retrieveRelationshipSchema(String name) {
         throw new RuntimeException("not done");
     }
 
     @Override
-    public void deleteRelationshipSchema(RelationshipSchema schema) {
+    public void deleteRelationshipSchema(RelationshipDefinition schema) {
         throw new RuntimeException("not done");
     }
 }

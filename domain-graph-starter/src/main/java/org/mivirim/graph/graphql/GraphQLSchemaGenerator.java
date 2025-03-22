@@ -1,13 +1,13 @@
 package org.mivirim.graph.graphql;
 
 import graphql.schema.idl.TypeDefinitionRegistry;
-import org.mivirim.graph.schema.EntitySchema;
-import org.mivirim.graph.schema.RelationshipSchema;
+import org.mivirim.graph.schema.EntityDefinition;
+import org.mivirim.graph.schema.RelationshipDefinition;
 
 import java.util.Set;
 
 public interface GraphQLSchemaGenerator {
 
-    TypeDefinitionRegistry generateTypeDefinitions(Set<EntitySchema> entitySchemas, Set<RelationshipSchema> relationshipSchemas);
+    TypeDefinitionRegistry generateTypeDefinitions(Set<EntityDefinition> entityDefinitions, Set<RelationshipDefinition> relationshipDefinitions);
 
 }

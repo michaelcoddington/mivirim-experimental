@@ -5,16 +5,16 @@ import java.util.Set;
 
 public interface SchemaManager {
 
-    Set<EntitySchema> retrieveEntitySchemas();
-    void createEntitySchema(EntitySchema schema);
-    void updateEntitySchema(EntitySchema schema);
-    Optional<EntitySchema> retrieveEntitySchema(String name);
-    void deleteEntitySchema(EntitySchema schema);
+    Set<EntityDefinition> retrieveEntitySchemas();
+    void createEntitySchema(EntityDefinition schema);
+    void updateEntitySchema(EntityDefinition schema);
+    Optional<EntityDefinition> retrieveEntitySchema(String name);
+    void deleteEntitySchema(EntityDefinition schema);
 
-    Set<RelationshipSchema> retrieveRelationshipSchemas();
-    void createRelationshipSchema(RelationshipSchema schema);
-    void updateRelationshipSchema(RelationshipSchema schema);
-    Optional<RelationshipSchema> retrieveRelationshipSchema(String name);
-    void deleteRelationshipSchema(RelationshipSchema schema);
+    Set<RelationshipDefinition> retrieveRelationshipSchemas();
+    void createRelationshipSchema(RelationshipDefinition schema);
+    void updateRelationshipSchema(RelationshipDefinition schema);
+    Optional<RelationshipDefinition> retrieveRelationshipSchema(String name);
+    void deleteRelationshipSchema(RelationshipDefinition schema);
 
 }

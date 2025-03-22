@@ -1,14 +1,10 @@
 package org.mivirim.graph.schema;
 
-import java.util.Set;
+import java.util.Objects;
 
 public abstract class Schema {
 
     String name;
-
-    int version;
-
-    Set<Property> properties;
 
     public String getName() {
         return name;
@@ -18,20 +14,15 @@ public abstract class Schema {
         this.name = name;
     }
 
-    public int getVersion() {
-        return version;
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (!(o instanceof Schema schema)) return false;
+        return Objects.equals(name, schema.name);
     }
 
-    public void setVersion(int version) {
-        this.version = version;
+    @Override
+    public int hashCode() {
+        return Objects.hashCode(name);
     }
-
-    public Set<Property> getProperties() {
-        return properties;
-    }
-
-    public void setProperties(Set<Property> properties) {
-        this.properties = properties;
-    }
-
 }

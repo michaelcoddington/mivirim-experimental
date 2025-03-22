@@ -2,9 +2,9 @@ package org.mivirim.graph.impl;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.apache.tinkerpop.gremlin.process.traversal.Traversal;
 import org.apache.tinkerpop.gremlin.process.traversal.dsl.graph.GraphTraversalSource;
 import org.mivirim.graph.GraphManager;
-import org.mivirim.graph.Traversal;
 import org.springframework.stereotype.Component;
 
 @Component
@@ -16,11 +16,6 @@ public class GraphManagerImpl implements GraphManager {
 
     public GraphManagerImpl(GraphTraversalSource traversalSource) {
         this.traversalSource = traversalSource;
-    }
-
-    @Override
-    public Traversal newTraversal() {
-        return new TraversalImpl(traversalSource);
     }
 
     @Override

@@ -1,8 +1,6 @@
 package org.mivirim.graph;
 
-public interface GraphManager {
-
-    Traversal newTraversal();
+public interface GraphManager { ;
 
     void resetGraph();
 

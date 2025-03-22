@@ -8,8 +8,8 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.mivirim.graph.cluster.ClusterService;
 import org.mivirim.graph.graphql.GraphQLSchemaGenerator;
-import org.mivirim.graph.schema.EntitySchema;
-import org.mivirim.graph.schema.RelationshipSchema;
+import org.mivirim.graph.schema.EntityDefinition;
+import org.mivirim.graph.schema.RelationshipDefinition;
 import org.mivirim.graph.schema.SchemaChangeCoordinator;
 import org.mivirim.graph.schema.SchemaManager;
 
@@ -57,10 +57,10 @@ public class GraphQLPublisherImpl implements ReloadSchemaIndicator {
 
     @DgsTypeDefinitionRegistry
     public TypeDefinitionRegistry typeDefinitionRegistry() {
-        Set<EntitySchema> entitySchemaSet = schemaManager.retrieveEntitySchemas();
-        Set<RelationshipSchema> relationshipSchemas = schemaManager.retrieveRelationshipSchemas();
+        Set<EntityDefinition> entityDefinitionSet = schemaManager.retrieveEntitySchemas();
+        Set<RelationshipDefinition> relationshipDefinitions = schemaManager.retrieveRelationshipSchemas();
         try {
-            return schemaGenerator.generateTypeDefinitions(entitySchemaSet, relationshipSchemas);
+            return schemaGenerator.generateTypeDefinitions(entityDefinitionSet, relationshipDefinitions);
         } finally {
             schemaChanged = false;
             schemaPublished = true;

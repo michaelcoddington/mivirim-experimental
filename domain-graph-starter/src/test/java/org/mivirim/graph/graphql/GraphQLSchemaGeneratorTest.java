@@ -7,7 +7,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.mivirim.graph.graphql.impl.GraphQLSchemaGeneratorImpl;
-import org.mivirim.graph.schema.EntitySchema;
+import org.mivirim.graph.schema.EntityDefinition;
 
 import java.util.Optional;
 import java.util.Set;
@@ -26,7 +26,7 @@ public class GraphQLSchemaGeneratorTest {
     @Test
     @DisplayName("Generate GraphQL types for entities")
     void testGenerateObjectTypes() {
-        EntitySchema photoEntity = new EntitySchema();
+        EntityDefinition photoEntity = new EntityDefinition();
         photoEntity.setName("Photo");
 
         TypeDefinitionRegistry registry = generator.generateTypeDefinitions(Set.of(photoEntity), Set.of());
