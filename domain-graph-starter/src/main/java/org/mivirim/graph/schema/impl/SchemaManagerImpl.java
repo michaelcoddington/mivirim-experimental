@@ -40,9 +40,8 @@ public class SchemaManagerImpl implements SchemaManager {
 
     @Override
     public Set<EntityDefinition> retrieveEntitySchemas() {
-        EntityDefinition coverSchema = new EntityDefinition();
-        coverSchema.setName("Cover");
-        return Set.of(coverSchema);
+        GraphTraversal<Vertex, Vertex> start = traversalSource.V().hasLabel(SCHEMA_LABEL);
+        return retrieveEntitySchemas(start);
     }
 
     @Override
@@ -106,13 +105,21 @@ public class SchemaManagerImpl implements SchemaManager {
 
     @Override
     public Optional<EntityDefinition> retrieveEntitySchema(String name) {
+        GraphTraversal<Vertex, Vertex> start = traversalSource.V().hasLabel(SCHEMA_LABEL).has("name", name);
+        Set<EntityDefinition> defs = retrieveEntitySchemas(start);
+        if (defs.isEmpty()) {
+            return Optional.empty();
+        } else {
+            return Optional.of(defs.iterator().next());
+        }
+    }
+
+    private Set<EntityDefinition> retrieveEntitySchemas(GraphTraversal<Vertex, Vertex> startingTraversal) {
         var elementProjectionName = "elements";
         var propertyNodeProjectionName = "propertyNodes";
         var propertyGroupProjectionName = "propertyGroups";
 
-        GraphTraversal<Vertex, Map<String, Object>> iter = traversalSource.V()
-                .hasLabel(SCHEMA_LABEL)
-                .has("name", name)
+        GraphTraversal<Vertex, Map<String, Object>> iter = startingTraversal
                 .project(elementProjectionName, propertyNodeProjectionName, propertyGroupProjectionName)
                 // elements of the schema node
                 .by(__.elementMap())
@@ -126,8 +133,8 @@ public class SchemaManagerImpl implements SchemaManager {
                                 .by(__.out("has-property").elementMap().fold())
                                 .fold()
                 );
-        if (iter.hasNext()) {
-            Map<String, Object> v = iter.next();
+
+        return iter.toStream().map(v -> {
             EntityDefinition schema = new EntityDefinition();
             var propertyMap = (HashMap) v.get(elementProjectionName);
             schema.setName((String) propertyMap.get("name"));
@@ -142,11 +149,8 @@ public class SchemaManagerImpl implements SchemaManager {
                     .map(this::mapToPropertyGroupDefinition)
                     .collect(Collectors.toSet());
             schema.setPropertyGroups(groups);
-
-            return Optional.of(schema);
-        } else {
-            return Optional.empty();
-        }
+            return schema;
+        }).collect(Collectors.toSet());
     }
 
     private PropertyDefinition mapToPropertyDefinition(Map<String, Object> map) {
