@@ -177,6 +177,7 @@ public class SchemaManagerImpl implements SchemaManager {
         Map<String, Object> elements = (Map) map.get("elements");
         ArrayList<Map<String, Object>> propertyNodes = (ArrayList) map.get("propertyNodes");
         group.setName((String) elements.get("name"));
+        group.setDescription((String) elements.get("description"));
         Set<PropertyDefinition> groupProperties = propertyNodes.stream()
                 .map(this::mapToPropertyDefinition).collect(Collectors.toSet());
         group.setProperties(groupProperties);

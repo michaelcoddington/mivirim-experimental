@@ -1,0 +1,26 @@
+#type Rating {
+#    avgStars: Float
+#}
+
+#input RatingInput {
+#    avgStars: Float
+#}
+
+
+#type Mutation {
+#    addRating(rating: RatingInput): Rating
+#}
+
+#type Query {
+#    testA: TestA
+#    testB: TestB
+#}
+
+#type TestA {
+#    name: String
+#}
+
+#type TestB {
+#    name: String
+#}
+
