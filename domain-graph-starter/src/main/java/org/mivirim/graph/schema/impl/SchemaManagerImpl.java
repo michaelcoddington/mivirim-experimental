@@ -13,6 +13,7 @@ import org.mivirim.graph.schema.PropertyDefinition;
 import org.mivirim.graph.schema.PropertyGroupDefinition;
 import org.mivirim.graph.schema.PropertyType;
 import org.mivirim.graph.schema.RelationshipDefinition;
+import org.mivirim.graph.schema.SchemaChangeCoordinator;
 import org.mivirim.graph.schema.SchemaManager;
 import org.springframework.stereotype.Service;
 
@@ -34,8 +35,11 @@ public class SchemaManagerImpl implements SchemaManager {
 
     private final GraphTraversalSource traversalSource;
 
-    public SchemaManagerImpl(GraphTraversalSource traversalSource) {
+    private final SchemaChangeCoordinator schemaChangeCoordinator;
+
+    public SchemaManagerImpl(GraphTraversalSource traversalSource, SchemaChangeCoordinator schemaChangeCoordinator) {
         this.traversalSource = traversalSource;
+        this.schemaChangeCoordinator = schemaChangeCoordinator;
     }
 
     @Override
@@ -52,7 +56,9 @@ public class SchemaManagerImpl implements SchemaManager {
             throw new DuplicateException(String.format("Schema %s already exists", schema.getName()));
         } catch (NoSuchElementException er) {
             GraphTraversal<Vertex, ?> traversal = traversalSource.addV(SCHEMA_LABEL)
-                    .property("name", schema.getName()).as("schema");
+                    .property("name", schema.getName())
+                    .property("description", schema.getDescription())
+                    .as("schema");
 
             AtomicInteger vertexCount = new AtomicInteger(0);
 
@@ -62,6 +68,7 @@ public class SchemaManagerImpl implements SchemaManager {
 
                 traversal = traversal.addV(LabelConstants.SCHEMA_PROPERTY_LABEL)
                         .property("name", p.getName())
+                        .property("description", p.getDescription())
                         .property("type", p.getType().toString())
                         .as(ref);
                 traversal = traversal.addE("has-property")
@@ -74,6 +81,7 @@ public class SchemaManagerImpl implements SchemaManager {
 
                 traversal = traversal.addV(LabelConstants.SCHEMA_PROPERTY_GROUP_LABEL)
                         .property("name", groupDefinition.getName())
+                        .property("description", groupDefinition.getDescription())
                         .as(groupRef);
                 traversal = traversal.addE("has-property-group")
                         .from("schema").to(groupRef);
@@ -83,6 +91,7 @@ public class SchemaManagerImpl implements SchemaManager {
 
                     traversal = traversal.addV(LabelConstants.SCHEMA_PROPERTY_LABEL)
                             .property("name", groupPropertyDef.getName())
+                            .property("description", groupPropertyDef.getDescription())
                             .property("type", groupPropertyDef.getType().toString())
                             .as(ref);
                     traversal = traversal.addE("has-property")
@@ -92,6 +101,7 @@ public class SchemaManagerImpl implements SchemaManager {
 
             traversal.next();
             LOG.info("Created schema {}", schema);
+            schemaChangeCoordinator.signalEntitySchemaChange();
         } finally {
             tx.commit();
             tx.close();
@@ -138,6 +148,7 @@ public class SchemaManagerImpl implements SchemaManager {
             EntityDefinition schema = new EntityDefinition();
             var propertyMap = (HashMap) v.get(elementProjectionName);
             schema.setName((String) propertyMap.get("name"));
+            schema.setDescription((String) propertyMap.get("description"));
 
             ArrayList<Map<String, Object>> properties = (ArrayList) v.get(propertyNodeProjectionName);
             Set<PropertyDefinition> schemaProps = properties.stream()
@@ -156,6 +167,7 @@ public class SchemaManagerImpl implements SchemaManager {
     private PropertyDefinition mapToPropertyDefinition(Map<String, Object> map) {
         PropertyDefinition p = new PropertyDefinition();
         p.setName((String) map.get("name"));
+        p.setDescription((String) map.get("description"));
         p.setType(PropertyType.valueOf((String) map.get("type")));
         return p;
     }

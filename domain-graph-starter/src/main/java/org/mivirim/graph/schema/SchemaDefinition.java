@@ -2,9 +2,11 @@ package org.mivirim.graph.schema;
 
 import java.util.Objects;
 
-public abstract class Schema {
+public abstract class SchemaDefinition {
 
     String name;
+
+    String description;
 
     public String getName() {
         return name;
@@ -14,10 +16,18 @@ public abstract class Schema {
         this.name = name;
     }
 
+    public String getDescription() {
+        return description;
+    }
+
+    public void setDescription(String description) {
+        this.description = description;
+    }
+
     @Override
     public boolean equals(Object o) {
         if (this == o) return true;
-        if (!(o instanceof Schema schema)) return false;
+        if (!(o instanceof SchemaDefinition schema)) return false;
         return Objects.equals(name, schema.name);
     }
 

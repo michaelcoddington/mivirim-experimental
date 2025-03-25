@@ -20,21 +20,34 @@ public class GraphQLSchemaGeneratorImpl implements GraphQLSchemaGenerator {
     public TypeDefinitionRegistry generateTypeDefinitions(Set<EntityDefinition> entityDefinitions, Set<RelationshipDefinition> relationshipDefinitions) {
         TypeDefinitionRegistry registry = new TypeDefinitionRegistry();
 
-        for (EntityDefinition schema: entityDefinitions) {
-            ObjectTypeDefinition entityTypeDefinition = ObjectTypeDefinition.newObjectTypeDefinition()
-                    .name(schema.getName())
-                    .fieldDefinitions(List.of(
-                                    FieldDefinition.newFieldDefinition()
-                                            .name("name")
-                                            .type(new TypeName("String"))
-                                            .description(new Description("Some name", null, false))
-                                            .build()
-                            ))
-                    .build();
-            registry.add(entityTypeDefinition);
+        for (EntityDefinition entityDefinition: entityDefinitions) {
+            registry.add(getEntityTypeDefinition(entityDefinition));
         }
 
         return registry;
+    }
+
+    private ObjectTypeDefinition getEntityTypeDefinition(EntityDefinition entityDefinition) {
+        Description entityDescription = entityDefinition.getDescription() == null ? null : new Description(entityDefinition.getDescription(), null, false);
+        List<FieldDefinition> fieldDefinitions = entityDefinition.getProperties().stream()
+                .map(propertyDefinition -> {
+                    TypeName typeName = switch (propertyDefinition.getType()) {
+                        case STRING -> new TypeName("String");
+                        default -> throw new RuntimeException("Unsupported type: " + propertyDefinition.getType());
+                    };
+                    Description propertyDescription = propertyDefinition.getDescription() == null ? null : new Description(propertyDefinition.getDescription(), null, false);
+
+                    return FieldDefinition.newFieldDefinition()
+                            .name(propertyDefinition.getName())
+                            .type(typeName)
+                            .description(propertyDescription)
+                            .build();
+                }).toList();
+        return ObjectTypeDefinition.newObjectTypeDefinition()
+                .name(entityDefinition.getName())
+                .description(entityDescription)
+                .fieldDefinitions(fieldDefinitions)
+                .build();
     }
 
 }

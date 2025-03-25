@@ -9,6 +9,8 @@ public class PropertyDefinition {
 
     PropertyType type;
 
+    String description;
+
     public String getName() {
         return name;
     }
@@ -23,6 +25,14 @@ public class PropertyDefinition {
 
     public void setType(PropertyType type) {
         this.type = type;
+    }
+
+    public String getDescription() {
+        return description;
+    }
+
+    public void setDescription(String description) {
+        this.description = description;
     }
 
     @Override

@@ -35,12 +35,12 @@ public class GraphQLPublisherImpl implements ReloadSchemaIndicator {
         this.schemaGenerator = generator;
         this.schemaManager = schemaManager;
         clusterService.addClusterJoinReaction(() -> {
-            LOG.info("Cluster joined; publish GraphQL schema");
+            LOG.info("Cluster joined; publishing GraphQL schema");
             publishSchema();
         });
 
         coordinator.addSchemaChangeReaction(() -> {
-            LOG.info("Cluster joined; publish GraphQL schema");
+            LOG.info("Schema changed; publishing GraphQL schema");
             publishSchema();
         });
     }

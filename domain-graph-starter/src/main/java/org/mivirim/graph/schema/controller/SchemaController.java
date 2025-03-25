@@ -1,18 +1,38 @@
 package org.mivirim.graph.schema.controller;
 
-import org.mivirim.graph.schema.dto.SchemaDto;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+import org.mivirim.graph.schema.EntityDefinition;
+import org.mivirim.graph.schema.SchemaManager;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.Set;
+
 @RestController
 @RequestMapping("/api/schema")
 public class SchemaController {
 
-    @PutMapping
-    void upsertSchema(@RequestBody SchemaDto schemaDto) {
+    private static final Logger LOG = LogManager.getLogger(SchemaController.class);
 
+    private final SchemaManager schemaManager;
+
+    public SchemaController(SchemaManager schemaManager) {
+        this.schemaManager = schemaManager;
+    }
+
+    @PutMapping("/entity")
+    void upsertEntityDefinition(@RequestBody EntityDefinition definition) {
+        LOG.info("Upserting definition {}", definition);
+        schemaManager.createEntitySchema(definition);
+    }
+
+    @GetMapping("/entity")
+    Set<EntityDefinition> getEntityDefinitions() {
+        return schemaManager.retrieveEntitySchemas();
     }
 
 }

@@ -17,7 +17,7 @@ public class SchemaDtoTest {
         var s = """
                     { "name": "testSchema" }
                 """;
-        SchemaDto dto = objectMapper.readValue(s, SchemaDto.class);
+        EntityDefinitionDto dto = objectMapper.readValue(s, EntityDefinitionDto.class);
         assertEquals("testSchema", dto.getName());
     }
 
@@ -33,11 +33,11 @@ public class SchemaDtoTest {
                         ]
                     }
                 """;
-        SchemaDto dto = objectMapper.readValue(s, SchemaDto.class);
+        EntityDefinitionDto dto = objectMapper.readValue(s, EntityDefinitionDto.class);
         assertEquals("testSchema", dto.getName());
-        Set<SchemaPropertyDto> properties = dto.getProperties();
+        Set<PropertyDefinitionDto> properties = dto.getProperties();
         assertEquals(1, properties.size());
-        SchemaPropertyDto propertyDto = properties.iterator().next();
+        PropertyDefinitionDto propertyDto = properties.iterator().next();
         assertEquals("testProperty1", propertyDto.getName());
     }
 

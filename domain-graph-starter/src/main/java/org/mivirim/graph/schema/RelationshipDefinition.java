@@ -2,7 +2,7 @@ package org.mivirim.graph.schema;
 
 import java.util.Set;
 
-public class RelationshipDefinition extends Schema {
+public class RelationshipDefinition extends SchemaDefinition {
 
     private Set<PropertyGroupDefinition> propertyGroupDefinitions;
 
