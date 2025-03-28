@@ -20,6 +20,7 @@
         <eureka.version>4.2.0</eureka.version>
         <hazelcast.version>5.5.0</hazelcast.version>
         <janusgraph.version>1.1.1-20241118-163713.4b9d009</janusgraph.version>
+        <jte.version>3.1.16</jte.version>
         <netflix.dgs.version>10.0.3</netflix.dgs.version>
         <tinkerpop.version>3.7.3</tinkerpop.version>
     </properties>
@@ -128,6 +129,20 @@
             <artifactId>hazelcast-spring</artifactId>
             <version>${hazelcast.version}</version>
         </dependency>
+
+        <!-- Java Template Engine -->
+        <dependency>
+            <groupId>gg.jte</groupId>
+            <artifactId>jte-spring-boot-starter-3</artifactId>
+            <version>${jte.version}</version>
+            <exclusions>
+                <exclusion>
+                    <groupId>org.springframework.boot</groupId>
+                    <artifactId>spring-boot-autoconfigure</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+
     </dependencies>
 
 </project>

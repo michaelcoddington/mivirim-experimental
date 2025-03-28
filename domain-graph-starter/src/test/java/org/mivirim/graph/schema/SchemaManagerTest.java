@@ -12,6 +12,7 @@ import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.mock;
 
 public class SchemaManagerTest {
 
@@ -22,7 +23,8 @@ public class SchemaManagerTest {
     void setup() {
         JanusAutoConfiguration janusAutoConfiguration = new JanusAutoConfiguration();
         traversalSource = janusAutoConfiguration.traversalSource(janusAutoConfiguration.inMemoryGraph());
-        schemaManager = new SchemaManagerImpl(traversalSource);
+        SchemaChangeCoordinator coordinator = mock(SchemaChangeCoordinator.class);
+        schemaManager = new SchemaManagerImpl(traversalSource, coordinator);
     }
 
     @Test

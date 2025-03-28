@@ -1,43 +1,12 @@
-0) Generate GraphQL types from Entity schemas
 0b) Generate GraphQL fields from Relationship schemas
-
-1) Generate and publish GraphQL API on startup
-2) Generate and publish GraphQL API on schema create
 3) Generate and publish GraphQL API on schema update
 4) Generate and publish GraphQL API on schema remove
+5) Implement example entity create
+6) Implement example entity retrieve
+7) Implement example entity update
 
+8) Gateway:
+    a) Publish a graphql list of domains
+    b) Allow the upload of a binary to a given domain
 
-5) Define the DTOs for schemas
-
-    - Schema
-        * name
-        * id
-
-        -EntitySchema
-
-            - LocalEntitySchema
-                * property groups
-                * properties
-
-            - RemoteEntitySchema
-                * domain name
-
-        -RelationshipSchema
-            * property groups
-            * properties
-
-            * from entity (EntitySchema)
-            * minimum cardinality
-            * maximum cardinality
-            * to entity (EntitySchema)
-
-
-What is cardinality?
-    Cardinality is expressed from the perspective of the OUTGOING entity.
-    It has a minimum and maximum.
-    If minimum is missing, the relationship is optional.
-    If maximum is missing, there's no limit to the number of related outgoing entities.
-    Minimim cannot be greater than maximum.
-    Maximum must be greater than 0 if it is present.
-    Minimum must be greater than 0 if it is present.
 

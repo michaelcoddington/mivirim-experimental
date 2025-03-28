@@ -93,7 +93,7 @@ public class GraphQLSchemaGeneratorImpl implements GraphQLSchemaGenerator {
             TypeName typeName = new TypeName(groupDef.getName());
             Description groupPropertyDescription = groupDef.getDescription();
             return FieldDefinition.newFieldDefinition()
-                    .name(groupDef.getName())
+                    .name(groupDef.getAdditionalData().get("propertyGroupName"))
                     .description(groupPropertyDescription)
                     .type(typeName)
                     .build();
@@ -116,6 +116,9 @@ public class GraphQLSchemaGeneratorImpl implements GraphQLSchemaGenerator {
         InputObjectTypeDefinition entityInputObjectDefinition = InputObjectTypeDefinition.newInputObjectDefinition()
                 .name(String.format("%sInput", entityDefinition.getName()))
                 .description(entityDescription)
+                .additionalData(Map.of(
+                        "originalEntity", entityDefinition.getName()
+                ))
                 .inputValueDefinitions(inputValueDefinitions)
                 .build();
 
@@ -153,8 +156,9 @@ public class GraphQLSchemaGeneratorImpl implements GraphQLSchemaGenerator {
     }
 
     private InputValueDefinition getInputValueDefinition(InputObjectTypeDefinition inputObjectTypeDefinition) {
+        String originalPropertyGroupName = inputObjectTypeDefinition.getAdditionalData().get("propertyGroupName");
         return InputValueDefinition.newInputValueDefinition()
-                .name(inputObjectTypeDefinition.getName())
+                .name(originalPropertyGroupName == null ? inputObjectTypeDefinition.getName() : originalPropertyGroupName)
                 .type(new TypeName(inputObjectTypeDefinition.getName()))
                 .description(inputObjectTypeDefinition.getDescription())
                 .build();
@@ -184,6 +188,10 @@ public class GraphQLSchemaGeneratorImpl implements GraphQLSchemaGenerator {
         ObjectTypeDefinition groupDefinition = ObjectTypeDefinition.newObjectTypeDefinition()
                 .name(groupTypeName)
                 .description(groupDescription)
+                .additionalData(Map.of(
+                        "originalEntity", entityDefinition.getName(),
+                        "propertyGroupName", propertyGroupDefinition.getName()
+                ))
                 .fieldDefinitions(groupProperties)
                 .build();
         return groupDefinition;
@@ -195,8 +203,12 @@ public class GraphQLSchemaGeneratorImpl implements GraphQLSchemaGenerator {
         List<InputValueDefinition> inputValueDefinitions = propertyGroupDefinition.getProperties().stream().map(this::getInputValueDefinition).toList();
 
         InputObjectTypeDefinition entityInputObjectDefinition = InputObjectTypeDefinition.newInputObjectDefinition()
-                .name(String.format("%sInput", propertyGroupDefinition.getName()))
+                .name(String.format("%s_%sInput", entityDefinition.getName(), propertyGroupDefinition.getName()))
                 .description(description)
+                .additionalData(Map.of(
+                        "originalEntity", entityDefinition.getName(),
+                        "propertyGroupName", propertyGroupDefinition.getName()
+                ))
                 .inputValueDefinitions(inputValueDefinitions)
                 .build();
 

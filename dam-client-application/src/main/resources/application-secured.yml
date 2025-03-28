@@ -1,0 +1,16 @@
+spring:
+  security:
+    oauth2:
+      client:
+        registration:
+          dam-client-oidc:
+            provider: spring
+            client-id: dam-client
+            client-secret: secret
+            authorization-grant-type: authorization_code
+            redirect-uri: "http://127.0.0.1:9090/login/oauth2/code/{registrationId}"
+            scope: openid
+            client-name: Mivirim OAuth
+        provider:
+          spring:
+            issuer-uri: http://auth-server:10000

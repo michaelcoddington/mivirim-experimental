@@ -9,14 +9,12 @@
         <version>0.0.1-SNAPSHOT</version>
     </parent>
 
-    <artifactId>client-application-starter</artifactId>
+    <artifactId>auth-server</artifactId>
 
     <properties>
         <maven.compiler.source>21</maven.compiler.source>
         <maven.compiler.target>21</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-
-        <jte.version>3.1.16</jte.version>
     </properties>
 
     <dependencies>
@@ -36,31 +34,21 @@
                 </exclusion>
             </exclusions>
         </dependency>
-
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-actuator</artifactId>
+            <version>${spring.boot.version}</version>
+        </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-security</artifactId>
             <version>${spring.boot.version}</version>
         </dependency>
-
         <dependency>
             <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-oauth2-client</artifactId>
+            <artifactId>spring-boot-starter-oauth2-authorization-server</artifactId>
             <version>${spring.boot.version}</version>
         </dependency>
-
-        <!-- Java Template Engine -->
-       <dependency>
-           <groupId>gg.jte</groupId>
-           <artifactId>jte-spring-boot-starter-3</artifactId>
-           <version>${jte.version}</version>
-           <exclusions>
-               <exclusion>
-                   <groupId>org.springframework.boot</groupId>
-                   <artifactId>spring-boot-autoconfigure</artifactId>
-               </exclusion>
-           </exclusions>
-       </dependency>
     </dependencies>
 
 </project>

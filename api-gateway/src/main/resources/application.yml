@@ -6,6 +6,9 @@ spring:
       enabled: true
 server:
   port: 8761
+  tomcat:
+    accesslog:
+      enabled: true
 eureka:
   client:
     register-with-eureka: false

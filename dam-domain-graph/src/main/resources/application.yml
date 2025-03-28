@@ -24,3 +24,8 @@ eureka.instance:
 
 graph:
   backend: berkeley
+
+gg:
+  jte:
+    development-mode: true
+    template-location: src/main/resources/templates/
