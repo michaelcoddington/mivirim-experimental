@@ -19,10 +19,13 @@ management:
           - health
           - info
 
-eureka.instance:
+gateway:
   hostname: localhost
+  scheme: http
+  port: 8761
 
 graph:
+  domainName: dam-domain
   backend: berkeley
 
 gg:

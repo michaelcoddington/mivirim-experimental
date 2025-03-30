@@ -57,13 +57,6 @@
             <version>${spring.boot.version}</version>
         </dependency>
 
-        <!-- https://mvnrepository.com/artifact/org.springframework.cloud/spring-cloud-starter-netflix-eureka-server -->
-        <dependency>
-            <groupId>org.springframework.cloud</groupId>
-            <artifactId>spring-cloud-starter-netflix-eureka-server</artifactId>
-            <version>${eureka.version}</version>
-        </dependency>
-
         <!-- Netflix Domain Graph Service -->
         <dependency>
             <groupId>com.netflix.graphql.dgs</groupId>

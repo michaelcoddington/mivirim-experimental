@@ -62,6 +62,11 @@ public class ClusterServiceImpl implements ClusterService, MembershipListener {
     }
 
     @Override
+    public Member getLocalMember() {
+        return hazelcast.getCluster().getLocalMember();
+    }
+
+    @Override
     public void addClusterJoinReaction(ClusterJoinReaction reaction) {
         joinReactions.add(reaction);
         if (isJoined) {

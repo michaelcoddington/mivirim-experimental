@@ -16,6 +16,8 @@ public interface ClusterService {
 
     Set<Member> getClusterMembers();
 
+    Member getLocalMember();
+
     void addClusterJoinReaction(ClusterJoinReaction reaction);
 
     <K, V> IMap<K, V> getMap(String name);

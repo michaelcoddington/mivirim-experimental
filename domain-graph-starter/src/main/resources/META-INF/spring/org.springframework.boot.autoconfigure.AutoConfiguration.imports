@@ -3,3 +3,4 @@ org.mivirim.graph.JanusAutoConfiguration
 org.mivirim.graph.GraphQLAutoConfiguration
 org.mivirim.graph.SchemaAutoConfiguration
 org.mivirim.graph.WebAutoConfiguration
+org.mivirim.graph.RegistryAutoConfiguration

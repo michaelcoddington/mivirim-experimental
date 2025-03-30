@@ -26,6 +26,14 @@
     </properties>
 
     <dependencies>
+
+        <!-- Mivirim -->
+        <dependency>
+            <groupId>org.mivirim</groupId>
+            <artifactId>api-gateway-model</artifactId>
+            <version>${project.parent.version}</version>
+        </dependency>
+
         <!-- Spring -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
@@ -100,14 +108,6 @@
             <groupId>org.apache.commons</groupId>
             <artifactId>commons-lang3</artifactId>
             <version>${commons.lang3.version}</version>
-        </dependency>
-
-        <!-- Netflix Eureka -->
-        <!-- https://mvnrepository.com/artifact/org.springframework.cloud/spring-cloud-starter-netflix-eureka-client -->
-        <dependency>
-            <groupId>org.springframework.cloud</groupId>
-            <artifactId>spring-cloud-starter-netflix-eureka-client</artifactId>
-            <version>${eureka.version}</version>
         </dependency>
 
         <!-- Netflix Domain Graph Service -->
