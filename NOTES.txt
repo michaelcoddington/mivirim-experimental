@@ -10,3 +10,24 @@
     b) Allow the upload of a binary to a given domain
 
 
+
+OK OK the binary storage adapter:
+
+    1) openWriter(): BinaryDataWriter  // returns an object that can be used to write data to storage
+    2) commitWriter(writer): BinaryHashes  // commits the output stream to permanent storage and returns its hash info
+    3) abandonWriter(writer) // wipes out the backing file for this stream without committing to permanent storage
+
+
+
+10) Binary storage:
+
+    * The controller accepts a multipart upload
+        * The controller passes the DataBuffer over to an upload service
+            * The upload service stores each file via a storage adapter by its upload ID
+                * The storage adapter writes out the file data and returns the SHA1 and MD5 hashes
+            * The upload service then consults the graph to see if the hashes exist.
+                * If they do exist, the storage service tells the adapter to delete the temp file
+                * If they do not exist, the storage service tells the adapter to commit the temp file
+                * In either case, the end result will be a data node ID with the associated hashes
+            * The service will pass back each upload ID with its corresponding node ID
+        * The controller returns a map of upload IDs that map to the coresponding node IDs

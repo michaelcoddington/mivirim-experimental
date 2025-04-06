@@ -1,12 +1,14 @@
 package org.mivirim.graph.registry;
 
+import org.mivirim.graph.ConditionalOnPropertyPrefix;
 import org.springframework.boot.context.properties.ConfigurationProperties;
-import org.springframework.context.annotation.Configuration;
+import org.springframework.stereotype.Component;
 
 import java.util.StringJoiner;
 
-@Configuration
-@ConfigurationProperties(prefix = "gateway")
+@Component
+@ConfigurationProperties(prefix = "mivirim.gateway")
+@ConditionalOnPropertyPrefix(prefix = "mivirim.gateway")
 public class GatewayConfiguration {
 
     private String scheme;

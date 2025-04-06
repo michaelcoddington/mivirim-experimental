@@ -4,3 +4,4 @@ org.mivirim.graph.GraphQLAutoConfiguration
 org.mivirim.graph.SchemaAutoConfiguration
 org.mivirim.graph.WebAutoConfiguration
 org.mivirim.graph.RegistryAutoConfiguration
+org.mivirim.graph.StorageAutoConfiguration

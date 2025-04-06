@@ -6,12 +6,14 @@ import org.apache.logging.log4j.Logger;
 import org.mivirim.gateway.api.DomainInstanceInfo;
 import org.mivirim.graph.cluster.ClusterService;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Mono;
 
 @Service
+@ConditionalOnBean(GatewayConfiguration.class)
 public class GatewayRegistrar {
 
     private static final Logger LOG = LogManager.getLogger(GatewayRegistrar.class);

@@ -19,10 +19,11 @@ management:
           - health
           - info
 
-gateway:
-  hostname: localhost
-  scheme: http
-  port: 8761
+mivirim:
+  # gateway:
+  #  hostname: localhost
+  #  scheme: http
+  #  port: 8761
 
 graph:
   domainName: dam-domain

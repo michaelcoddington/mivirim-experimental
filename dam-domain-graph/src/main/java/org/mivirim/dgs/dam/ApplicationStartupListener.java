@@ -8,6 +8,8 @@ import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.ApplicationListener;
 import org.springframework.stereotype.Component;
 
+import java.util.Optional;
+
 @Component
 public class ApplicationStartupListener implements ApplicationListener<ApplicationReadyEvent> {
 
@@ -17,15 +19,20 @@ public class ApplicationStartupListener implements ApplicationListener<Applicati
 
     private GatewayRegistrar gatewayRegistrar;
 
-    public ApplicationStartupListener(GraphTraversalSource traversal, GatewayRegistrar gatewayRegistrar) {
+    public ApplicationStartupListener(GraphTraversalSource traversal, Optional<GatewayRegistrar> registrarOptional) {
         this.traversal = traversal;
-        this.gatewayRegistrar = gatewayRegistrar;
+        registrarOptional.ifPresent(g -> gatewayRegistrar = g);
     }
 
     @Override
     public void onApplicationEvent(ApplicationReadyEvent event) {
         LOG.info("Got graph traversal {}", traversal);
-        gatewayRegistrar.register();
+        if (gatewayRegistrar == null) {
+            LOG.warn("No gateway registrar found; starting standalone");
+        } else {
+            gatewayRegistrar.register();
+        }
+
     }
 
 }
