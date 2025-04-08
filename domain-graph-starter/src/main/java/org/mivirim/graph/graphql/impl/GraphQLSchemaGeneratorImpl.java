@@ -82,7 +82,9 @@ public class GraphQLSchemaGeneratorImpl implements GraphQLSchemaGenerator {
 
     private EntityGraphqlDefinition getEntityTypeDefinition(EntityDefinition entityDefinition) {
         Description entityDescription = entityDefinition.getDescription() == null ? null : new Description(entityDefinition.getDescription(), null, false);
-        List<FieldDefinition> fieldDefinitions = entityDefinition.getProperties().stream().map(this::getPropertyFieldDefinition).toList();
+        List<FieldDefinition> fieldDefinitions = entityDefinition.getProperties() == null ?
+                List.of() :
+                entityDefinition.getProperties().stream().map(this::getPropertyFieldDefinition).toList();
 
         List<ObjectTypeDefinition> propertyGroupDefinitions = entityDefinition.getPropertyGroups() == null ? List.of() :
                 entityDefinition.getPropertyGroups().stream().map(group -> getPropertyGroupTypeDefinition(entityDefinition, group)).toList();
@@ -110,7 +112,8 @@ public class GraphQLSchemaGeneratorImpl implements GraphQLSchemaGenerator {
                 .build();
 
         ArrayList<InputValueDefinition> inputValueDefinitions = new ArrayList<>();
-        inputValueDefinitions.addAll(entityDefinition.getProperties().stream().map(this::getInputValueDefinition).toList());
+        Set<PropertyDefinition> entityProps = entityDefinition.getProperties();
+        inputValueDefinitions.addAll(entityProps == null ? Set.of() : entityProps.stream().map(this::getInputValueDefinition).toList());
         inputValueDefinitions.addAll(propertyGroupInputDefinitions.stream().map(this::getInputValueDefinition).toList());
 
         InputObjectTypeDefinition entityInputObjectDefinition = InputObjectTypeDefinition.newInputObjectDefinition()

@@ -11,11 +11,14 @@
 
 
 
-OK OK the binary storage adapter:
+What classes are involved here?
 
-    1) openWriter(): BinaryDataWriter  // returns an object that can be used to write data to storage
-    2) commitWriter(writer): BinaryHashes  // commits the output stream to permanent storage and returns its hash info
-    3) abandonWriter(writer) // wipes out the backing file for this stream without committing to permanent storage
+    1) BinaryStorageController and the MultipartParser/etc: the web-related classes for handling
+        binary storage coming in from the web
+    2) BinaryStorageService: high-level coordinator between the actual storage and the binary
+        references stored in the graph
+    3) BinaryStorageAdapter: the actual implmentation of storage (block storage, S3, HDFS, etc)
+
 
 
 
