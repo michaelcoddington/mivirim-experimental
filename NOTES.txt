@@ -43,7 +43,7 @@ In order to talk about this stuff, we need to talk about predicates....
     b) With name and value
 
 
-Of course in order to talk about predicates, we should talk about operators:
+Of course in order to talk about predicates, we should talk about operators very quickly:
 
 1) Equals
     a) Property value
