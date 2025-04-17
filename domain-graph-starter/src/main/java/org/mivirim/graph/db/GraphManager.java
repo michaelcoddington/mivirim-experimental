@@ -1,4 +1,4 @@
-package org.mivirim.graph;
+package org.mivirim.graph.db;
 
 public interface GraphManager { ;
 

@@ -1,7 +1,8 @@
-package org.mivirim.graph.storage;
+package org.mivirim.graph.db;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.mivirim.graph.db.impl.MultipartParser;
 import org.springframework.core.io.buffer.DataBuffer;
 import org.springframework.http.server.reactive.ServerHttpRequest;
 import org.springframework.web.bind.annotation.PutMapping;
@@ -23,10 +24,10 @@ public class BinaryStorageController {
 
     private Pattern boundaryPattern = Pattern.compile("multipart/form-data; boundary=(.+)");
 
-    private BinaryStorageService storageService;
+    private EntityManager entityManager;
 
-    public BinaryStorageController(BinaryStorageService storageService) {
-        this.storageService = storageService;
+    public BinaryStorageController(EntityManager entityManager) {
+        this.entityManager = entityManager;
     }
 
     @PutMapping("/upload")
@@ -40,7 +41,8 @@ public class BinaryStorageController {
         Matcher boundaryMatcher = boundaryPattern.matcher(contentType);
         if (boundaryMatcher.matches()) {
             String boundary = boundaryMatcher.group(1);
-            return storageService.storeBinaryContent(boundary, bufferFlux);
+            MultipartParser multipartParser = new MultipartParser(boundary, entityManager);
+            return multipartParser.parse(bufferFlux);
         } else {
             return Mono.empty();
         }

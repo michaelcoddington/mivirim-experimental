@@ -2,6 +2,7 @@ package org.mivirim.graph.storage.impl;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.mivirim.graph.db.storage.impl.BlockDeviceBinaryStorageAdapter;
 
 import java.io.IOException;
 import java.io.InputStream;

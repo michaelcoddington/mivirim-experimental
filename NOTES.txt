@@ -11,26 +11,62 @@
 
 
 
-What classes are involved here?
+OK, next is entity creation and linking
 
-    1) BinaryStorageController and the MultipartParser/etc: the web-related classes for handling
-        binary storage coming in from the web
-    2) BinaryStorageService: high-level coordinator between the actual storage and the binary
-        references stored in the graph
-    3) BinaryStorageAdapter: the actual implmentation of storage (block storage, S3, HDFS, etc)
+1) Add entity
+2) Update entity
+3) Remove entity
+
+1) Add relationship
+    a) Add relationship from new entity to new entity
+    b) Add relationship from new entity to existing entity
+    c) Add relationship from existing entity to existing entity
+    d) Add relationship from existing entity to new entity
+2) Update relationship
+    a) Move relationship source
+    b) Move relationship target
+    c) Add relationship properties
+    d) Remove relationship properties
+    e) Modify relationship properties
+3) Remove relationship
+
+In order to talk about this stuff, we need to talk about predicates....
+
+1) Has outbound relationship
+    a) With name (e.g. has-photo)
+    b) With name and target type (e.g. has-photo, target type = Photograph)
+    c) With target type (target type = Photograph)
+    d) With name and property (e.g. has-photo, property name = ""
+2) Has inbound relationship (same as above)
+3) Has property
+    a) With name
+    b) With name and value
 
 
+Of course in order to talk about predicates, we should talk about operators:
 
+1) Equals
+    a) Property value
+        i) Number
+        ii) String
+        iii) Date
+        iv) Boolean
+2) Does not equal
+    b) Property value
+3) Exists
+    a) Property name
+4) Does not exist
+    a) Property name
+5) Starts with
+    a) Property name
+    b) Property value
+6) Ends with
+    a) Property name
+    b) Property value
+7) Matches regex
+    a) Property name
+    b) Property value
+8) Does not match regex
+9) Greater than
+10) Less than
 
-10) Binary storage:
-
-    * The controller accepts a multipart upload
-        * The controller passes the DataBuffer over to an upload service
-            * The upload service stores each file via a storage adapter by its upload ID
-                * The storage adapter writes out the file data and returns the SHA1 and MD5 hashes
-            * The upload service then consults the graph to see if the hashes exist.
-                * If they do exist, the storage service tells the adapter to delete the temp file
-                * If they do not exist, the storage service tells the adapter to commit the temp file
-                * In either case, the end result will be a data node ID with the associated hashes
-            * The service will pass back each upload ID with its corresponding node ID
-        * The controller returns a map of upload IDs that map to the coresponding node IDs

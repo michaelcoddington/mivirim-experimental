@@ -1,10 +1,11 @@
-package org.mivirim.graph.storage.impl;
+package org.mivirim.graph.db.storage.impl;
 
 import com.google.common.base.Splitter;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.mivirim.graph.storage.BinaryHash;
-import org.mivirim.graph.storage.BinaryStorageAdapter;
+import org.mivirim.graph.db.impl.HashingBinaryDataWriter;
+import org.mivirim.graph.db.storage.BinaryHash;
+import org.mivirim.graph.db.storage.BinaryStorageAdapter;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
@@ -71,7 +72,7 @@ public class BlockDeviceBinaryStorageAdapter implements BinaryStorageAdapter {
     }
 
     @Override
-    public BinaryDataWriter openWriter() throws IOException, NoSuchAlgorithmException {
+    public HashingBinaryDataWriter openWriter() throws IOException {
         File outputFile;
         String uuid;
         do {
@@ -80,12 +81,15 @@ public class BlockDeviceBinaryStorageAdapter implements BinaryStorageAdapter {
         } while (outputFile.exists());
 
         tempFileMap.put(uuid, outputFile);
-
-        return new BinaryDataWriter(uuid, new FileOutputStream(outputFile));
+        try {
+            return new HashingBinaryDataWriter(uuid, new FileOutputStream(outputFile));
+        } catch (NoSuchAlgorithmException e) {
+            throw new IOException(e);
+        }
     }
 
     @Override
-    public BinaryHash close(BinaryDataWriter writer) throws IOException {
+    public BinaryHash close(HashingBinaryDataWriter writer) throws IOException {
         BinaryHash dataHash = writer.close();
         String id = writer.getId();
 
@@ -141,7 +145,7 @@ public class BlockDeviceBinaryStorageAdapter implements BinaryStorageAdapter {
     }
 
     @Override
-    public void abandon(BinaryDataWriter writer) {
+    public void abandon(HashingBinaryDataWriter writer) {
         throw new RuntimeException("Not implemented yet");
     }
 }

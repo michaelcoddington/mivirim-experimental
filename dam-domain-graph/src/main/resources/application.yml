@@ -29,6 +29,12 @@ graph:
   domainName: dam-domain
   backend: berkeley
 
+binary:
+  storage:
+    strategy: block
+    block:
+        location: target/storage-temp
+
 gg:
   jte:
     development-mode: true

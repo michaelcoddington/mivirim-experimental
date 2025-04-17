@@ -1,4 +1,4 @@
-package org.mivirim.graph.storage;
+package org.mivirim.graph.db.storage;
 
 public class BinaryHash {
 

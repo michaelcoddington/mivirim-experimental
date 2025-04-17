@@ -1,17 +1,20 @@
-package org.mivirim.graph.storage.impl;
+package org.mivirim.graph.db.impl;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.mivirim.graph.storage.BinaryHash;
+import org.mivirim.graph.db.EntityManager;
 import org.springframework.core.io.buffer.DataBuffer;
 import org.springframework.core.io.buffer.DataBufferUtils;
+import reactor.core.Exceptions;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
+import java.io.IOException;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -27,6 +30,8 @@ public class MultipartParser {
         SEEKING_SUBSEQUENT_BOUNDARY,
         END_MULTIPART
     }
+
+    private EntityManager entityManager;
 
     private State currentState = State.SEEKING_INITIAL_BOUNDARY;
 
@@ -44,13 +49,20 @@ public class MultipartParser {
 
     private ArrayBuffer buffer = new ArrayBuffer(64000);
 
+    private Pattern contentIdPattern = Pattern.compile("form-data; name=\"(.+)\"; filename=\".+\"");
+
     private Pattern headerPattern = Pattern.compile("([^:]+): (.+)");
 
     private static final Logger LOG = LogManager.getLogger(MultipartParser.class);
 
-    private Map<String, BinaryHash> partHashMap = new HashMap<>();
+    private Map<String, String> partHashMap = new HashMap<>();
 
-    public MultipartParser(String boundary) {
+    private String currentPartId;
+
+    private HashingBinaryDataWriter hashingBinaryDataWriter;
+
+    public MultipartParser(String boundary, EntityManager entityManager) {
+        this.entityManager = entityManager;
         LOG.info("Created multipart parser with boundary {}", boundary);
         this.initialBoundaryBytes = ("--" + boundary + "\r\n").getBytes(UTF_8);
         this.subsequentBoundaryBytesStart = ("\r\n--" + boundary).getBytes(UTF_8); // improve this to not include \r\n this way
@@ -58,38 +70,57 @@ public class MultipartParser {
         this.subsequentBoundaryBytesEnding = ("\r\n--" + boundary + "--").getBytes(UTF_8); // improve this to not include \r\n this way
     }
 
-    public Mono<Void> parse(Flux<DataBuffer> bufferFlux) {
-        return bufferFlux.mapNotNull(dataBuffer -> {
+    public Mono<Map<String, String>> parse(Flux<DataBuffer> bufferFlux) {
+        return bufferFlux.map(dataBuffer -> {
             try {
+                DataBufferUtils.retain(dataBuffer);
                 process(dataBuffer);
-            } catch (Exception er) {
-                er.printStackTrace();
+                return dataBuffer;
+            } catch (IOException ioe) {
+                LOG.error("Error processing data", ioe);
+                throw Exceptions.propagate(ioe);
+            } finally {
+                DataBufferUtils.release(dataBuffer);
             }
-            return null;
-        }).then();
+        }).then(Mono.just(partHashMap));
     }
 
-    private void process(DataBuffer dataBuffer) {
+    private void process(DataBuffer dataBuffer) throws IOException {
         int byteCount = dataBuffer.readableByteCount();
         LOG.info("Data buffer is adding " + byteCount + " bytes");
         buffer.write(dataBuffer);
-        DataBufferUtils.release(dataBuffer);
         processBuffer();
     }
 
     // called when an individual part of a multipart upload has started
-    private void partStarted(Map<String, String> partHeaders) {
+    private void partStarted(Map<String, String> partHeaders) throws IOException {
         LOG.info("Part started with headers {}", partHeaders);
+        Optional<String> opt = partHeaders.entrySet().stream().filter(entry -> entry.getKey().contains("Content-Disposition")).findAny().map(Map.Entry::getValue);
+        if (opt.isPresent()) {
+            String disposition = opt.get();
+            Matcher matcher = contentIdPattern.matcher(disposition);
+            if (matcher.matches()) {
+                currentPartId = matcher.group(1);
+                hashingBinaryDataWriter = entityManager.openWriter();
+            } else {
+                throw new IllegalStateException(disposition + " is not a valid Content-Disposition header");
+            }
+        } else {
+            throw new IllegalStateException("Content disposition header not found");
+        }
     }
 
     // called when the body of a part has been read
-    private void bodyBytesRead(byte[] bytes) {
+    private void bodyBytesRead(byte[] bytes) throws IOException {
         LOG.info("BodyBytes read: {}", bytes.length);
+        hashingBinaryDataWriter.write(bytes);
     }
 
     // called when a part ends
-    private void partEnded() {
+    private void partEnded() throws IOException {
         LOG.info("Part ended");
+        String dataId = entityManager.commitBinary(hashingBinaryDataWriter);
+        partHashMap.put(currentPartId, dataId);
     }
 
     // called when all parsing is complete
@@ -97,7 +128,7 @@ public class MultipartParser {
         LOG.info("Parse ended");
     }
 
-    private void processBuffer() {
+    private void processBuffer() throws IOException {
         boolean continuationDesired = false;
         LOG.info("Processing with current state {}", currentState);
 

@@ -1,6 +1,6 @@
-package org.mivirim.graph.storage.impl;
+package org.mivirim.graph.db.impl;
 
-import org.mivirim.graph.storage.BinaryHash;
+import org.mivirim.graph.db.storage.BinaryHash;
 
 import java.io.IOException;
 import java.io.OutputStream;
@@ -9,7 +9,7 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.HexFormat;
 
-public class BinaryDataWriter {
+public class HashingBinaryDataWriter {
 
     private String id;
 
@@ -19,7 +19,7 @@ public class BinaryDataWriter {
 
     MessageDigest md5Digest;
 
-    public BinaryDataWriter(String id, OutputStream outputStream) throws NoSuchAlgorithmException {
+    public HashingBinaryDataWriter(String id, OutputStream outputStream) throws NoSuchAlgorithmException {
         this.id = id;
 
         sha256Digest = MessageDigest.getInstance("SHA-256");
@@ -39,7 +39,7 @@ public class BinaryDataWriter {
         return id;
     }
 
-    BinaryHash close() throws IOException {
+    public BinaryHash close() throws IOException {
         hashingOutputStream.flush();
         hashingOutputStream.close();
 

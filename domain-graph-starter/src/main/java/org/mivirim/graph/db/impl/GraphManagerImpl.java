@@ -1,10 +1,9 @@
-package org.mivirim.graph.impl;
+package org.mivirim.graph.db.impl;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.apache.tinkerpop.gremlin.process.traversal.Traversal;
 import org.apache.tinkerpop.gremlin.process.traversal.dsl.graph.GraphTraversalSource;
-import org.mivirim.graph.GraphManager;
+import org.mivirim.graph.db.GraphManager;
 import org.springframework.stereotype.Component;
 
 @Component

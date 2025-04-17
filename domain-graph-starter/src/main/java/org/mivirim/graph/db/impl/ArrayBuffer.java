@@ -1,4 +1,4 @@
-package org.mivirim.graph.storage.impl;
+package org.mivirim.graph.db.impl;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
