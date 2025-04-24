@@ -26,8 +26,8 @@
 
         <jackson.version>2.18.1</jackson.version>
         <log4j.version>2.20.0</log4j.version>
-        <spring.boot.version>3.4.3</spring.boot.version>
-        <junit.version>5.8.2</junit.version>
+        <spring.boot.version>3.4.4</spring.boot.version>
+        <junit.version>5.11.4</junit.version>
     </properties>
 
     <dependencies>
@@ -42,11 +42,20 @@
             <artifactId>log4j-core</artifactId>
             <version>${log4j.version}</version>
         </dependency>
+        <!--
         <dependency>
             <groupId>org.apache.logging.log4j</groupId>
             <artifactId>log4j-slf4j2-impl</artifactId>
             <version>2.23.1</version>
         </dependency>
+        -->
+        <dependency>
+            <groupId>org.apache.logging.log4j</groupId>
+            <artifactId>log4j-slf4j-impl</artifactId>
+            <version>2.24.3</version>
+            <scope>compile</scope>
+        </dependency>
+
         <dependency>
             <groupId>com.fasterxml.jackson.dataformat</groupId>
             <artifactId>jackson-dataformat-yaml</artifactId>
@@ -97,6 +106,7 @@
                 <artifactId>maven-surefire-plugin</artifactId>
                 <version>2.22.1</version>
             </plugin>
+            <!--
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-javadoc-plugin</artifactId>
@@ -114,6 +124,7 @@
                     <reportOutputDirectory>${project.build.directory}/javadoc</reportOutputDirectory>
                 </configuration>
             </plugin>
+            -->
         </plugins>
     </build>
 

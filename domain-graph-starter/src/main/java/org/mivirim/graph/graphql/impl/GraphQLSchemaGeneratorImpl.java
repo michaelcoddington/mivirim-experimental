@@ -11,10 +11,10 @@ import graphql.schema.idl.TypeDefinitionRegistry;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.mivirim.graph.graphql.GraphQLSchemaGenerator;
-import org.mivirim.graph.schema.EntityDefinition;
-import org.mivirim.graph.schema.PropertyDefinition;
-import org.mivirim.graph.schema.PropertyGroupDefinition;
-import org.mivirim.graph.schema.RelationshipDefinition;
+import org.mivirim.graph.db.schema.EntityDefinition;
+import org.mivirim.graph.db.schema.PropertyDefinition;
+import org.mivirim.graph.db.schema.PropertyGroupDefinition;
+import org.mivirim.graph.db.schema.RelationshipDefinition;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;

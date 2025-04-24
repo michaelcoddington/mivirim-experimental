@@ -30,6 +30,19 @@ OK, next is entity creation and linking
     e) Modify relationship properties
 3) Remove relationship
 
+Now keep in mind that these operations (which are mutations) will need to support 2-phase commits, as a system may be mutating data across several subdomains.
+
+EntityManager
+    * startTransaction: Transaction
+    * executeMutation(Transaction t, Mutation m)
+    * prepareCommit(Transaction t)
+    * commit(Transaction t)
+    * abort(Transaction t)
+
+
+
+Retrieval
+
 In order to talk about this stuff, we need to talk about predicates....
 
 1) Has outbound relationship
@@ -69,4 +82,5 @@ Of course in order to talk about predicates, we should talk about operators very
 8) Does not match regex
 9) Greater than
 10) Less than
+
 

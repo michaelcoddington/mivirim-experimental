@@ -8,10 +8,9 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.mivirim.graph.cluster.ClusterService;
 import org.mivirim.graph.graphql.GraphQLSchemaGenerator;
-import org.mivirim.graph.schema.EntityDefinition;
-import org.mivirim.graph.schema.RelationshipDefinition;
-import org.mivirim.graph.schema.SchemaChangeCoordinator;
-import org.mivirim.graph.schema.SchemaManager;
+import org.mivirim.graph.db.schema.EntityDefinition;
+import org.mivirim.graph.db.schema.RelationshipDefinition;
+import org.mivirim.graph.db.schema.SchemaManager;
 
 import java.util.Set;
 
@@ -29,7 +28,6 @@ public class GraphQLPublisherImpl implements ReloadSchemaIndicator {
     private GraphQLSchemaGenerator schemaGenerator;
 
     public GraphQLPublisherImpl(ClusterService clusterService,
-                                SchemaChangeCoordinator coordinator,
                                 GraphQLSchemaGenerator generator,
                                 SchemaManager schemaManager) {
         this.schemaGenerator = generator;
@@ -39,7 +37,7 @@ public class GraphQLPublisherImpl implements ReloadSchemaIndicator {
             publishSchema();
         });
 
-        coordinator.addSchemaChangeReaction(() -> {
+        schemaManager.addSchemaChangeReaction(() -> {
             LOG.info("Schema changed; publishing GraphQL schema");
             publishSchema();
         });
@@ -57,8 +55,8 @@ public class GraphQLPublisherImpl implements ReloadSchemaIndicator {
 
     @DgsTypeDefinitionRegistry
     public TypeDefinitionRegistry typeDefinitionRegistry() {
-        Set<EntityDefinition> entityDefinitionSet = schemaManager.retrieveEntitySchemas();
-        Set<RelationshipDefinition> relationshipDefinitions = schemaManager.retrieveRelationshipSchemas();
+        Set<EntityDefinition> entityDefinitionSet = schemaManager.retrieveEntityDefinitions();
+        Set<RelationshipDefinition> relationshipDefinitions = schemaManager.retrieveRelationshipDefinitions();
         try {
             return schemaGenerator.generateTypeDefinitions(entityDefinitionSet, relationshipDefinitions);
         } finally {

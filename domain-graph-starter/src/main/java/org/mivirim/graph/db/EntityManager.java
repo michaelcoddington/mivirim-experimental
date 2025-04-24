@@ -6,6 +6,8 @@ import java.io.IOException;
 
 public interface EntityManager {
 
+    void resetGraph();
+
     /**
      * Opens a writer that can be used to add binary data to the graph.
      */
@@ -21,5 +23,16 @@ public interface EntityManager {
      * @param writer
      */
     void abandonBinary(HashingBinaryDataWriter writer);
+
+    /**
+     * Applies a mutation request and returns a transaction that can either be committed or rolled back (2-phase commit).
+     * @param mutationRequest a mutation request
+     * @return a transaction that is ready to be committed or aborted
+     */
+    Transaction executeMutation(MutationRequest mutationRequest);
+
+    void commit(Transaction transaction);
+
+    void abort(Transaction transaction);
 
 }

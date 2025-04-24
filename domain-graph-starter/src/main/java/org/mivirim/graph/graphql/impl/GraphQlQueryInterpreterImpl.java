@@ -9,8 +9,8 @@ import graphql.schema.idl.TypeDefinitionRegistry;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.mivirim.graph.graphql.GraphQlQueryInterpreter;
-import org.mivirim.graph.schema.EntityDefinition;
-import org.mivirim.graph.schema.SchemaManager;
+import org.mivirim.graph.db.schema.EntityDefinition;
+import org.mivirim.graph.db.schema.SchemaManager;
 
 import java.util.Map;
 import java.util.Set;
@@ -29,7 +29,7 @@ public class GraphQlQueryInterpreterImpl implements GraphQlQueryInterpreter {
 
     @DgsCodeRegistry
     public GraphQLCodeRegistry.Builder registry(GraphQLCodeRegistry.Builder codeRegistryBuilder, TypeDefinitionRegistry registry) {
-        Set<EntityDefinition> entityDefinitionSet = schemaManager.retrieveEntitySchemas();
+        Set<EntityDefinition> entityDefinitionSet = schemaManager.retrieveEntityDefinitions();
         if (entityDefinitionSet.isEmpty()) {
             return codeRegistryBuilder.clearDataFetchers();
         } else {

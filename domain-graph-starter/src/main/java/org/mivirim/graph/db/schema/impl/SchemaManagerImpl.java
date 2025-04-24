@@ -1,69 +1,92 @@
-package org.mivirim.graph.schema.impl;
+package org.mivirim.graph.db.schema.impl;
 
+import com.hazelcast.core.EntryEvent;
+import com.hazelcast.map.IMap;
+import com.hazelcast.map.listener.EntryAddedListener;
+import com.hazelcast.map.listener.EntryUpdatedListener;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.tinkerpop.gremlin.process.traversal.dsl.graph.GraphTraversal;
 import org.apache.tinkerpop.gremlin.process.traversal.dsl.graph.GraphTraversalSource;
 import org.apache.tinkerpop.gremlin.process.traversal.dsl.graph.__;
 import org.apache.tinkerpop.gremlin.structure.Vertex;
+import org.janusgraph.core.JanusGraph;
+import org.janusgraph.core.VertexLabel;
 import org.mivirim.graph.DuplicateException;
 import org.mivirim.graph.LabelConstants;
-import org.mivirim.graph.schema.EntityDefinition;
-import org.mivirim.graph.schema.PropertyDefinition;
-import org.mivirim.graph.schema.PropertyGroupDefinition;
-import org.mivirim.graph.schema.PropertyType;
-import org.mivirim.graph.schema.RelationshipDefinition;
-import org.mivirim.graph.schema.SchemaChangeCoordinator;
-import org.mivirim.graph.schema.SchemaManager;
+import org.mivirim.graph.cluster.ClusterService;
+import org.mivirim.graph.db.schema.EntityDefinition;
+import org.mivirim.graph.db.schema.PropertyDefinition;
+import org.mivirim.graph.db.schema.PropertyGroupDefinition;
+import org.mivirim.graph.db.schema.PropertyType;
+import org.mivirim.graph.db.schema.RelationshipDefinition;
+import org.mivirim.graph.db.schema.SchemaChangeReaction;
+import org.mivirim.graph.db.schema.SchemaManager;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Optional;
 import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
 import static org.mivirim.graph.LabelConstants.SCHEMA_LABEL;
 
 @Service
-public class SchemaManagerImpl implements SchemaManager {
+public class SchemaManagerImpl implements SchemaManager, EntryAddedListener<String, Object>, EntryUpdatedListener<String, Object> {
 
     private static final Logger LOG = LogManager.getLogger(SchemaManagerImpl.class);
 
+    private static final String SCHEMA_MAP_NAME = "schemaMap";
+    private static final String SCHEMA_VERSION_LABEL = "version";
+
+    private IMap<String, Object> schemaMap;
+    private List<SchemaChangeReaction> reactions = new ArrayList<>();
+
+    private final JanusGraph janusGraph;
+
     private final GraphTraversalSource traversalSource;
 
-    private final SchemaChangeCoordinator schemaChangeCoordinator;
+    private final ClusterService clusterService;
 
-    public SchemaManagerImpl(GraphTraversalSource traversalSource, SchemaChangeCoordinator schemaChangeCoordinator) {
+    public SchemaManagerImpl(JanusGraph graph, GraphTraversalSource traversalSource, ClusterService clusterService) {
+        this.janusGraph = graph;
         this.traversalSource = traversalSource;
-        this.schemaChangeCoordinator = schemaChangeCoordinator;
+        this.clusterService = clusterService;
+        this.schemaMap = clusterService.getMap(SCHEMA_MAP_NAME);
+        this.schemaMap.addEntryListener(this, true);
     }
 
     @Override
-    public Set<EntityDefinition> retrieveEntitySchemas() {
+    public Set<EntityDefinition> retrieveEntityDefinitions() {
         GraphTraversal<Vertex, Vertex> start = traversalSource.V().hasLabel(SCHEMA_LABEL);
-        return retrieveEntitySchemas(start);
+        return retrieveEntityDefinitions(start);
     }
 
     @Override
-    public void createEntitySchema(EntityDefinition schema) {
+    public void createEntityDefinition(EntityDefinition definition) {
         var tx = traversalSource.tx();
         try {
-            traversalSource.V().hasLabel(SCHEMA_LABEL).has("name", schema.getName()).next();
-            throw new DuplicateException(String.format("Schema %s already exists", schema.getName()));
+            traversalSource.V().hasLabel(SCHEMA_LABEL).has("name", definition.getName()).next();
+            throw new DuplicateException(String.format("Schema %s already exists", definition.getName()));
         } catch (NoSuchElementException er) {
+            VertexLabel typeLabel = janusGraph.makeVertexLabel(definition.getName()).make();
+            LOG.info("Created new vertex label {}", typeLabel);
+
             GraphTraversal<Vertex, ?> traversal = traversalSource.addV(SCHEMA_LABEL)
-                    .property("name", schema.getName())
-                    .property("description", schema.getDescription())
+                    .property("name", definition.getName())
+                    .property("description", definition.getDescription())
                     .as("schema");
 
             AtomicInteger vertexCount = new AtomicInteger(0);
 
             // add direct properties
-            for (PropertyDefinition p: schema.getProperties()) {
+            for (PropertyDefinition p: definition.getProperties()) {
                 String ref = String.valueOf(vertexCount.getAndIncrement());
 
                 traversal = traversal.addV(LabelConstants.SCHEMA_PROPERTY_LABEL)
@@ -76,7 +99,9 @@ public class SchemaManagerImpl implements SchemaManager {
             }
 
             // add property groups
-            for (PropertyGroupDefinition groupDefinition: schema.getPropertyGroups()) {
+            Set<PropertyGroupDefinition> propertyGroups = definition.getPropertyGroups() == null ? Set.of() : definition.getPropertyGroups();
+
+            for (PropertyGroupDefinition groupDefinition: propertyGroups) {
                 String groupRef = String.valueOf(vertexCount.getAndIncrement());
 
                 traversal = traversal.addV(LabelConstants.SCHEMA_PROPERTY_GROUP_LABEL)
@@ -100,23 +125,23 @@ public class SchemaManagerImpl implements SchemaManager {
             }
 
             traversal.next();
-            LOG.info("Created schema {}", schema);
-            schemaChangeCoordinator.signalEntitySchemaChange();
-        } finally {
             tx.commit();
+            LOG.info("Created definition {}", definition);
+            signalEntitySchemaChange();
+        } finally {
             tx.close();
         }
     }
 
     @Override
-    public void updateEntitySchema(EntityDefinition schema) {
+    public void updateEntityDefinition(EntityDefinition definition) {
         throw new RuntimeException("not done");
     }
 
     @Override
-    public Optional<EntityDefinition> retrieveEntitySchema(String name) {
+    public Optional<EntityDefinition> retrieveEntityDefinition(String name) {
         GraphTraversal<Vertex, Vertex> start = traversalSource.V().hasLabel(SCHEMA_LABEL).has("name", name);
-        Set<EntityDefinition> defs = retrieveEntitySchemas(start);
+        Set<EntityDefinition> defs = retrieveEntityDefinitions(start);
         if (defs.isEmpty()) {
             return Optional.empty();
         } else {
@@ -124,7 +149,7 @@ public class SchemaManagerImpl implements SchemaManager {
         }
     }
 
-    private Set<EntityDefinition> retrieveEntitySchemas(GraphTraversal<Vertex, Vertex> startingTraversal) {
+    private Set<EntityDefinition> retrieveEntityDefinitions(GraphTraversal<Vertex, Vertex> startingTraversal) {
         var elementProjectionName = "elements";
         var propertyNodeProjectionName = "propertyNodes";
         var propertyGroupProjectionName = "propertyGroups";
@@ -185,32 +210,62 @@ public class SchemaManagerImpl implements SchemaManager {
     }
 
     @Override
-    public void deleteEntitySchema(EntityDefinition schema) {
+    public void deleteEntityDefinition(EntityDefinition definition) {
         throw new RuntimeException("not done");
     }
 
     @Override
-    public Set<RelationshipDefinition> retrieveRelationshipSchemas() {
+    public Set<RelationshipDefinition> retrieveRelationshipDefinitions() {
         return Set.of();
     }
 
     @Override
-    public void createRelationshipSchema(RelationshipDefinition schema) {
+    public void createRelationshipDefinition(RelationshipDefinition definition) {
         throw new RuntimeException("not done");
     }
 
     @Override
-    public void updateRelationshipSchema(RelationshipDefinition schema) {
+    public void updateRelationshipDefinition(RelationshipDefinition definition) {
         throw new RuntimeException("not done");
     }
 
     @Override
-    public Optional<RelationshipDefinition> retrieveRelationshipSchema(String name) {
+    public Optional<RelationshipDefinition> retrieveRelationshipDefinition(String name) {
         throw new RuntimeException("not done");
     }
 
     @Override
-    public void deleteRelationshipSchema(RelationshipDefinition schema) {
+    public void deleteRelationshipDefinition(RelationshipDefinition definition) {
         throw new RuntimeException("not done");
+    }
+
+    public void signalEntitySchemaChange() {
+        LOG.info("Signaling entity schema change");
+        String uuid = UUID.randomUUID().toString();
+        schemaMap.put(SCHEMA_VERSION_LABEL, uuid);
+    }
+
+    @Override
+    public void addSchemaChangeReaction(SchemaChangeReaction reaction) {
+        reactions.add(reaction);
+    }
+
+    private void entryChanged(EntryEvent<String, Object> entryEvent) {
+        LOG.info("got entry event {}", entryEvent);
+        if (entryEvent.getKey().equals(SCHEMA_VERSION_LABEL)) {
+            reactions.forEach(SchemaChangeReaction::onSchemaChange);
+        }
+    }
+
+    /* Map listener methods */
+
+    @Override
+    public void entryAdded(EntryEvent<String, Object> entryEvent) {
+        entryChanged(entryEvent);
+    }
+
+    @Override
+    public void entryUpdated(EntryEvent<String, Object> entryEvent) {
+        entryChanged(entryEvent);
     }
 }

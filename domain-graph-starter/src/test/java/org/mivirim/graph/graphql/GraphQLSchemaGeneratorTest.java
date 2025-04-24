@@ -7,7 +7,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.mivirim.graph.graphql.impl.GraphQLSchemaGeneratorImpl;
-import org.mivirim.graph.schema.EntityDefinition;
+import org.mivirim.graph.db.schema.EntityDefinition;
 
 import java.util.Optional;
 import java.util.Set;

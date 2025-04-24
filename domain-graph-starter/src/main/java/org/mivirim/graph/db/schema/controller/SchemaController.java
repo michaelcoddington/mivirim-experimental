@@ -1,9 +1,9 @@
-package org.mivirim.graph.schema.controller;
+package org.mivirim.graph.db.schema.controller;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.mivirim.graph.schema.EntityDefinition;
-import org.mivirim.graph.schema.SchemaManager;
+import org.mivirim.graph.db.schema.EntityDefinition;
+import org.mivirim.graph.db.schema.SchemaManager;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -27,12 +27,12 @@ public class SchemaController {
     @PutMapping("/entity")
     void upsertEntityDefinition(@RequestBody EntityDefinition definition) {
         LOG.info("Upserting definition {}", definition);
-        schemaManager.createEntitySchema(definition);
+        schemaManager.createEntityDefinition(definition);
     }
 
     @GetMapping("/entity")
     Set<EntityDefinition> getEntityDefinitions() {
-        return schemaManager.retrieveEntitySchemas();
+        return schemaManager.retrieveEntityDefinitions();
     }
 
 }

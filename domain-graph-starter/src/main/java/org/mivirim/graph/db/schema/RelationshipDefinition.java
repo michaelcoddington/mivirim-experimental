@@ -1,4 +1,4 @@
-package org.mivirim.graph.schema;
+package org.mivirim.graph.db.schema;
 
 import java.util.Set;
 

@@ -1,4 +1,4 @@
-package org.mivirim.graph.schema;
+package org.mivirim.graph.db.schema;
 
 public class EntityReferenceDefinition extends SchemaDefinition {
 

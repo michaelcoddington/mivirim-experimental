@@ -1,4 +1,4 @@
-package org.mivirim.graph.schema;
+package org.mivirim.graph.db.schema;
 
 @FunctionalInterface
 public interface SchemaChangeReaction {

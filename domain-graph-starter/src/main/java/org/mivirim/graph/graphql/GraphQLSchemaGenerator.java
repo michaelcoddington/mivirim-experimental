@@ -1,8 +1,8 @@
 package org.mivirim.graph.graphql;
 
 import graphql.schema.idl.TypeDefinitionRegistry;
-import org.mivirim.graph.schema.EntityDefinition;
-import org.mivirim.graph.schema.RelationshipDefinition;
+import org.mivirim.graph.db.schema.EntityDefinition;
+import org.mivirim.graph.db.schema.RelationshipDefinition;
 
 import java.util.Set;
 
