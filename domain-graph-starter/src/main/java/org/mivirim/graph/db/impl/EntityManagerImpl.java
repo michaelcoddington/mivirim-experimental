@@ -3,11 +3,17 @@ package org.mivirim.graph.db.impl;
 import org.apache.tinkerpop.gremlin.process.traversal.dsl.graph.GraphTraversal;
 import org.apache.tinkerpop.gremlin.process.traversal.dsl.graph.GraphTraversalSource;
 import org.apache.tinkerpop.gremlin.structure.Vertex;
+import org.apache.tinkerpop.gremlin.structure.VertexProperty;
 import org.mivirim.graph.db.EntityManager;
-import org.mivirim.graph.db.EntityMutation;
-import org.mivirim.graph.db.MutationRequest;
-import org.mivirim.graph.db.Property;
+import org.mivirim.graph.db.PropertyNameTranslator;
 import org.mivirim.graph.db.Transaction;
+import org.mivirim.graph.db.mutation.EntityMutation;
+import org.mivirim.graph.db.mutation.ListProperty;
+import org.mivirim.graph.db.mutation.MutationRequest;
+import org.mivirim.graph.db.mutation.Property;
+import org.mivirim.graph.db.mutation.ScalarProperty;
+import org.mivirim.graph.db.query.Query;
+import org.mivirim.graph.db.query.Result;
 import org.mivirim.graph.db.storage.BinaryHash;
 import org.mivirim.graph.db.storage.BinaryStorageAdapter;
 import org.slf4j.Logger;
@@ -15,15 +21,12 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
-import java.util.Date;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
 import static org.mivirim.graph.LabelConstants.DATA_LABEL;
-import static org.mivirim.graph.LabelConstants.HAS_VERSION_LABEL;
-import static org.mivirim.graph.LabelConstants.VERSION_LABEL;
 
 @Service
 public class EntityManagerImpl implements EntityManager {
@@ -104,7 +107,7 @@ public class EntityManagerImpl implements EntityManager {
         Set<String> uids = new HashSet<>();
 
         GraphTraversal<Vertex, Vertex> traversal = null;
-        for (EntityMutation entityMutation: mutationRequest.getEntityMutations()) {
+        for (EntityMutation entityMutation : mutationRequest.getEntityMutations()) {
             String sourceId;
             do {
                 sourceId = UUID.randomUUID().toString();
@@ -113,18 +116,18 @@ public class EntityManagerImpl implements EntityManager {
             uids.add(sourceId);
 
             traversal = traversalSource.addV(entityMutation.getEntityType()).as(sourceId).property("uid", sourceId);
-            String versionId = sourceId + "_version";
-            traversal = traversal.addV(VERSION_LABEL).as(versionId);
 
-            traversal = traversal.addE(HAS_VERSION_LABEL)
-                    .property("version", 1)
-                    .property("dateCreated", new Date())
-                    .from(sourceId)
-                    .to(versionId)
-                    .inV();
-
-            for (Property property: entityMutation.getProperties()) {
-                traversal = traversal.property(property.getName(), property.getValue());
+            for (Property property : entityMutation.getProperties()) {
+                String translatedPropertyName = PropertyNameTranslator.externalPropertyNameToInternalName(entityMutation.getEntityType(), property.getName());
+                if (property instanceof ScalarProperty<?, ?> scalarProperty) {
+                    traversal = traversal.property(translatedPropertyName, scalarProperty.getValue());
+                } else if (property instanceof ListProperty<?> listProperty) {
+                    for (Object value : listProperty.getValues()) {
+                        traversal = traversal.property(VertexProperty.Cardinality.list, translatedPropertyName, value);
+                    }
+                } else {
+                    throw new IllegalArgumentException("Unsupported property type: " + property.getClass());
+                }
             }
         }
 
@@ -144,6 +147,11 @@ public class EntityManagerImpl implements EntityManager {
 
     @Override
     public void abort(Transaction transaction) {
+        throw new RuntimeException("Not implemented yet");
+    }
+
+    @Override
+    public Result executeQuery(Query query) {
         throw new RuntimeException("Not implemented yet");
     }
 }

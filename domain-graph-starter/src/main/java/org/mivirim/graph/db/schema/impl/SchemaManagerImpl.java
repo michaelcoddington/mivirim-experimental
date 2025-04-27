@@ -10,11 +10,19 @@ import org.apache.tinkerpop.gremlin.process.traversal.dsl.graph.GraphTraversal;
 import org.apache.tinkerpop.gremlin.process.traversal.dsl.graph.GraphTraversalSource;
 import org.apache.tinkerpop.gremlin.process.traversal.dsl.graph.__;
 import org.apache.tinkerpop.gremlin.structure.Vertex;
+import org.janusgraph.core.Cardinality;
 import org.janusgraph.core.JanusGraph;
+import org.janusgraph.core.PropertyKey;
 import org.janusgraph.core.VertexLabel;
+import org.janusgraph.core.schema.JanusGraphManagement;
+import org.janusgraph.core.schema.Mapping;
+import org.janusgraph.core.schema.SchemaStatus;
+import org.janusgraph.graphdb.database.management.GraphIndexStatusReport;
+import org.janusgraph.graphdb.database.management.ManagementSystem;
 import org.mivirim.graph.DuplicateException;
 import org.mivirim.graph.LabelConstants;
 import org.mivirim.graph.cluster.ClusterService;
+import org.mivirim.graph.db.PropertyNameTranslator;
 import org.mivirim.graph.db.schema.EntityDefinition;
 import org.mivirim.graph.db.schema.PropertyDefinition;
 import org.mivirim.graph.db.schema.PropertyGroupDefinition;
@@ -25,15 +33,17 @@ import org.mivirim.graph.db.schema.SchemaManager;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.NoSuchElementException;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import static org.mivirim.graph.LabelConstants.SCHEMA_LABEL;
 
@@ -52,12 +62,10 @@ public class SchemaManagerImpl implements SchemaManager, EntryAddedListener<Stri
 
     private final GraphTraversalSource traversalSource;
 
-    private final ClusterService clusterService;
-
+    // TODO: we don't need the traversal source in the constructor if we're getting the graph
     public SchemaManagerImpl(JanusGraph graph, GraphTraversalSource traversalSource, ClusterService clusterService) {
         this.janusGraph = graph;
         this.traversalSource = traversalSource;
-        this.clusterService = clusterService;
         this.schemaMap = clusterService.getMap(SCHEMA_MAP_NAME);
         this.schemaMap.addEntryListener(this, true);
     }
@@ -71,66 +79,132 @@ public class SchemaManagerImpl implements SchemaManager, EntryAddedListener<Stri
     @Override
     public void createEntityDefinition(EntityDefinition definition) {
         var tx = traversalSource.tx();
-        try {
-            traversalSource.V().hasLabel(SCHEMA_LABEL).has("name", definition.getName()).next();
-            throw new DuplicateException(String.format("Schema %s already exists", definition.getName()));
-        } catch (NoSuchElementException er) {
-            VertexLabel typeLabel = janusGraph.makeVertexLabel(definition.getName()).make();
+        boolean foundVertex = traversalSource.V().hasLabel(SCHEMA_LABEL).has("name", definition.getName()).hasNext();
+        tx.close();
+
+        if (foundVertex) {
+            throw new DuplicateException(String.format("Schema vertex for entity %s already exists", definition.getName()));
+        }
+
+        // create the vertex label
+        janusGraph.tx().begin();
+        VertexLabel typeLabel = janusGraph.getVertexLabel(definition.getName());
+        if (typeLabel == null) {
+            typeLabel = janusGraph.makeVertexLabel(definition.getName()).make();
             LOG.info("Created new vertex label {}", typeLabel);
+            janusGraph.tx().commit();
+        } else {
+            janusGraph.tx().rollback();
+            throw new DuplicateException(String.format("Vertex label for entity %s already exists", definition.getName()));
+        }
 
-            GraphTraversal<Vertex, ?> traversal = traversalSource.addV(SCHEMA_LABEL)
-                    .property("name", definition.getName())
-                    .property("description", definition.getDescription())
-                    .as("schema");
+        Set<PropertyDefinition> propertyDefinitions = definition.getProperties() == null ? Set.of() : definition.getProperties();
+        Set<PropertyDefinition> groupedPropertyDefinitions = definition.getPropertyGroups() == null ? Set.of() : definition.getPropertyGroups().stream().map(PropertyGroupDefinition::getProperties).flatMap(Set::stream).collect(Collectors.toSet());
+        Set<PropertyDefinition> allProperties = Stream.concat(propertyDefinitions.stream(), groupedPropertyDefinitions.stream()).collect(Collectors.toSet());
 
-            AtomicInteger vertexCount = new AtomicInteger(0);
+        // create the property keys
+        JanusGraphManagement management = janusGraph.openManagement();
+        Set<String> propertyKeyNames = new HashSet<>();
+        for (PropertyDefinition propertyDefinition : allProperties) {
+            String propertyKeyName = PropertyNameTranslator.externalPropertyNameToInternalName(definition.getName(), propertyDefinition.getName());
 
-            // add direct properties
-            for (PropertyDefinition p: definition.getProperties()) {
+            Class keyClass = switch (propertyDefinition.getType()) {
+                case STRING, STRING_LIST -> String.class;
+                case INT, INT_LIST -> Integer.class;
+                case DATE, DATE_LIST -> Date.class;
+                case BOOLEAN, BOOLEAN_LIST -> Boolean.class;
+                case DOUBLE, DOUBLE_LIST -> Double.class;
+            };
+
+            Cardinality cardinality = switch(propertyDefinition.getType()) {
+                case STRING, INT, DATE, BOOLEAN, DOUBLE -> Cardinality.SINGLE;
+                case STRING_LIST, INT_LIST, DATE_LIST, BOOLEAN_LIST, DOUBLE_LIST -> Cardinality.LIST;
+            };
+
+            management.makePropertyKey(propertyKeyName).dataType(keyClass).cardinality(cardinality).make();
+            propertyKeyNames.add(propertyKeyName);
+        }
+
+        VertexLabel entityTypeLabel = management.getVertexLabel(definition.getName());
+        Set<PropertyKey> keys = propertyKeyNames.stream().map(management::getPropertyKey).collect(Collectors.toSet());
+        JanusGraphManagement.IndexBuilder builder = management.buildIndex(definition.getName(), Vertex.class);
+        for (PropertyKey propertyKey : keys) {
+            if (propertyKey.dataType() == String.class) {
+                builder = builder.addKey(propertyKey, Mapping.STRING.asParameter());
+            } else {
+                builder = builder.addKey(propertyKey);
+            }
+        }
+
+        builder.indexOnly(entityTypeLabel).buildMixedIndex("search");
+        management.commit();
+
+        // reindex
+        management = janusGraph.openManagement();
+        try {
+            GraphIndexStatusReport report = ManagementSystem.awaitGraphIndexStatus(janusGraph, definition.getName()).status(SchemaStatus.ENABLED).call();
+            LOG.info("Index status: {}", report);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new RuntimeException(e);
+        } finally {
+            management.commit();
+        }
+
+        // create the schema vertices and edges
+        tx = traversalSource.tx();
+        GraphTraversal<Vertex, ?> traversal = traversalSource.addV(SCHEMA_LABEL)
+                .property("name", definition.getName())
+                .property("description", definition.getDescription())
+                .as("schema");
+
+        AtomicInteger vertexCount = new AtomicInteger(0);
+
+        // add direct properties
+        for (PropertyDefinition p: definition.getProperties()) {
+            String ref = String.valueOf(vertexCount.getAndIncrement());
+
+            traversal = traversal.addV(LabelConstants.SCHEMA_PROPERTY_LABEL)
+                    .property("name", p.getName())
+                    .property("description", p.getDescription())
+                    .property("type", p.getType().toString())
+                    .as(ref);
+            traversal = traversal.addE("has-property")
+                    .from("schema").to(ref);
+        }
+
+        // add property groups
+        Set<PropertyGroupDefinition> propertyGroups = definition.getPropertyGroups() == null ? Set.of() : definition.getPropertyGroups();
+
+        for (PropertyGroupDefinition groupDefinition: propertyGroups) {
+            String groupRef = String.valueOf(vertexCount.getAndIncrement());
+
+            traversal = traversal.addV(LabelConstants.SCHEMA_PROPERTY_GROUP_LABEL)
+                    .property("name", groupDefinition.getName())
+                    .property("description", groupDefinition.getDescription())
+                    .as(groupRef);
+            traversal = traversal.addE("has-property-group")
+                    .from("schema").to(groupRef);
+
+            for (PropertyDefinition groupPropertyDef: groupDefinition.getProperties()) {
                 String ref = String.valueOf(vertexCount.getAndIncrement());
 
                 traversal = traversal.addV(LabelConstants.SCHEMA_PROPERTY_LABEL)
-                        .property("name", p.getName())
-                        .property("description", p.getDescription())
-                        .property("type", p.getType().toString())
+                        .property("name", groupPropertyDef.getName())
+                        .property("description", groupPropertyDef.getDescription())
+                        .property("type", groupPropertyDef.getType().toString())
                         .as(ref);
                 traversal = traversal.addE("has-property")
-                        .from("schema").to(ref);
+                        .from(groupRef).to(ref);
             }
-
-            // add property groups
-            Set<PropertyGroupDefinition> propertyGroups = definition.getPropertyGroups() == null ? Set.of() : definition.getPropertyGroups();
-
-            for (PropertyGroupDefinition groupDefinition: propertyGroups) {
-                String groupRef = String.valueOf(vertexCount.getAndIncrement());
-
-                traversal = traversal.addV(LabelConstants.SCHEMA_PROPERTY_GROUP_LABEL)
-                        .property("name", groupDefinition.getName())
-                        .property("description", groupDefinition.getDescription())
-                        .as(groupRef);
-                traversal = traversal.addE("has-property-group")
-                        .from("schema").to(groupRef);
-
-                for (PropertyDefinition groupPropertyDef: groupDefinition.getProperties()) {
-                    String ref = String.valueOf(vertexCount.getAndIncrement());
-
-                    traversal = traversal.addV(LabelConstants.SCHEMA_PROPERTY_LABEL)
-                            .property("name", groupPropertyDef.getName())
-                            .property("description", groupPropertyDef.getDescription())
-                            .property("type", groupPropertyDef.getType().toString())
-                            .as(ref);
-                    traversal = traversal.addE("has-property")
-                            .from(groupRef).to(ref);
-                }
-            }
-
-            traversal.next();
-            tx.commit();
-            LOG.info("Created definition {}", definition);
-            signalEntitySchemaChange();
-        } finally {
-            tx.close();
         }
+
+        traversal.iterate();
+        tx.commit();
+
+        LOG.info("Created definition {}", definition);
+        signalEntitySchemaChange();
+
     }
 
     @Override

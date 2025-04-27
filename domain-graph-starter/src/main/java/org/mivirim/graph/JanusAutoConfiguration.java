@@ -53,31 +53,4 @@ public class JanusAutoConfiguration {
         return graph.traversal();
     }
 
-    /*
-    @Bean
-    public JanusGraphIndex index(JanusGraph graph) throws InterruptedException{
-        LOG.info("Initializating JanusGraph index");
-        JanusGraphManagement management = graph.openManagement();
-        management.makePropertyKey("name").dataType(String.class).make();
-        management.makePropertyKey("age").dataType(Integer.class).make();
-        JanusGraphIndex index = management.buildIndex("testIndex", Vertex.class)
-                .addKey(management.getPropertyKey("name"))
-                .addKey(management.getPropertyKey("age"))
-                .buildMixedIndex("search");
-        management.commit();
-
-
-        GraphIndexStatusReport report = ManagementSystem.awaitGraphIndexStatus(graph, "testIndex").status(SchemaStatus.ENABLED).call();
-        LOG.info("Index status: {}", report);
-
-        management = graph.openManagement();
-        LOG.info(management.printSchema());
-        LOG.info(management.printIndexes());
-
-
-        return index;
-    }
-
-     */
-
 }

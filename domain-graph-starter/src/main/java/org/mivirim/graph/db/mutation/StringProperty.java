@@ -1,6 +1,6 @@
-package org.mivirim.graph.db;
+package org.mivirim.graph.db.mutation;
 
-public class StringProperty implements Property<String> {
+public class StringProperty implements ScalarProperty<String, String> {
 
     private String value;
 

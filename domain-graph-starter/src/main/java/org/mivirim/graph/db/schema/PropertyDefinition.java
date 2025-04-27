@@ -11,6 +11,16 @@ public class PropertyDefinition {
 
     String description;
 
+    public PropertyDefinition() {
+        // no-arg
+    }
+
+    public PropertyDefinition(String name, PropertyType type, String description) {
+        this.name = name;
+        this.type = type;
+        this.description = description;
+    }
+
     public String getName() {
         return name;
     }

@@ -1,9 +1,7 @@
-package org.mivirim.graph.db;
+package org.mivirim.graph.db.mutation;
 
 public interface Property<T> {
 
     String getName();
-
-    T getValue();
 
 }
