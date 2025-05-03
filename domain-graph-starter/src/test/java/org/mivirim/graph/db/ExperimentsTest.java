@@ -2,6 +2,7 @@ package org.mivirim.graph.db;
 
 import org.apache.tinkerpop.gremlin.process.traversal.dsl.graph.__;
 import org.apache.tinkerpop.gremlin.structure.Vertex;
+import org.apache.tinkerpop.gremlin.structure.VertexProperty;
 import org.janusgraph.core.Cardinality;
 import org.janusgraph.core.JanusGraphFactory;
 import org.janusgraph.core.PropertyKey;
@@ -118,6 +119,38 @@ public class ExperimentsTest {
             newGraph.close();
         }
 
+    }
+
+    @Test
+    void testCopyVertex() {
+        var newGraph = JanusGraphFactory.build()
+                .set("storage.backend", "inmemory")
+                .open();
+
+        var traversal = newGraph.traversal();
+        var tx = traversal.tx();
+        tx.begin();
+        Vertex startVertex = traversal.addV("Product").property("name", "Test product").property(VertexProperty.Cardinality.list, "GRA", 3).property(VertexProperty.Cardinality.list, "GRA", 5).next();
+        tx.commit();
+        tx.close();
+
+        traversal = newGraph.traversal();
+        tx = traversal.tx();
+        tx.begin();
+        Vertex endVertex = traversal.V(startVertex.id()).as("start")
+                .addV(__.select("start").label()).as("new")
+                .sideEffect(
+                        __.select("start").properties().as("startProps").select("new").property(__.select("startProps").key(), __.select("startProps").value())
+                ).
+                addE("is-update-to").from("new").to("start")
+                .outV()
+                .next();
+        tx.commit();
+        tx.close();
+        LOG.info("Got new vertex {}", endVertex);
+
+        var newProps = newGraph.traversal().V(endVertex.id()).project("id", "values", "in", "out").by(__.id()).by(__.valueMap()).by(__.in()).by(__.out()).next();
+        LOG.info("Got new props {}", newProps);
     }
 
 }

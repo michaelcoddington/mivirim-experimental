@@ -20,5 +20,7 @@ Configuration:
     logger:
       - name: org.mivirim
         level: INFO
+      - name: org.janusgraph.graphdb.database.management
+        level: WARN
       - name: org.janusgraph.diskstorage.lucene
         level: DEBUG

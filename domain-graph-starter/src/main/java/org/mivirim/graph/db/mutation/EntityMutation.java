@@ -8,6 +8,7 @@ import java.util.Set;
 public class EntityMutation {
 
     private String entityType;
+    private Object id;
     private Set<Property> properties = new HashSet<>();
 
     public EntityMutation entityType(String entityType) {
@@ -17,6 +18,15 @@ public class EntityMutation {
 
     public String getEntityType() {
         return entityType;
+    }
+
+    public EntityMutation id(Object id) {
+        this.id = id;
+        return this;
+    }
+
+    public Object getId() {
+        return id;
     }
 
     public EntityMutation stringProperty(String name, String value) {

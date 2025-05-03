@@ -12,16 +12,19 @@ import org.apache.tinkerpop.gremlin.process.traversal.dsl.graph.__;
 import org.apache.tinkerpop.gremlin.structure.Vertex;
 import org.janusgraph.core.Cardinality;
 import org.janusgraph.core.JanusGraph;
+import org.janusgraph.core.JanusGraphTransaction;
 import org.janusgraph.core.PropertyKey;
 import org.janusgraph.core.VertexLabel;
 import org.janusgraph.core.schema.JanusGraphManagement;
 import org.janusgraph.core.schema.Mapping;
 import org.janusgraph.core.schema.SchemaStatus;
+import org.janusgraph.graphdb.database.StandardJanusGraph;
 import org.janusgraph.graphdb.database.management.GraphIndexStatusReport;
 import org.janusgraph.graphdb.database.management.ManagementSystem;
 import org.mivirim.graph.DuplicateException;
 import org.mivirim.graph.LabelConstants;
 import org.mivirim.graph.cluster.ClusterService;
+import org.mivirim.graph.db.PropertyConstants;
 import org.mivirim.graph.db.PropertyNameTranslator;
 import org.mivirim.graph.db.schema.EntityDefinition;
 import org.mivirim.graph.db.schema.PropertyDefinition;
@@ -68,6 +71,13 @@ public class SchemaManagerImpl implements SchemaManager, EntryAddedListener<Stri
         this.traversalSource = traversalSource;
         this.schemaMap = clusterService.getMap(SCHEMA_MAP_NAME);
         this.schemaMap.addEntryListener(this, true);
+        try {
+            this.verifyGlobalPropertiesAndIndexes();
+        } catch (InterruptedException ie) {
+            Thread.currentThread().interrupt();
+            LOG.error("Interrupted", ie);
+            throw new RuntimeException(ie);
+        }
     }
 
     @Override
@@ -76,8 +86,45 @@ public class SchemaManagerImpl implements SchemaManager, EntryAddedListener<Stri
         return retrieveEntityDefinitions(start);
     }
 
+    public void verifyGlobalPropertiesAndIndexes() throws InterruptedException {
+        JanusGraphManagement management = janusGraph.openManagement();
+
+        PropertyKey statusKey = management.getPropertyKey(PropertyConstants.STATUS_PROPERTY);
+        if (statusKey == null) {
+            statusKey = management.makePropertyKey(PropertyConstants.STATUS_PROPERTY).dataType(String.class).make();
+        }
+        PropertyKey transactionKey = management.getPropertyKey(PropertyConstants.TRANSACTION_ID_PROPERTY);
+        if (transactionKey == null) {
+            transactionKey = management.makePropertyKey(PropertyConstants.TRANSACTION_ID_PROPERTY).dataType(String.class).make();
+        }
+
+        String globalIndexName = "GLOBAL";
+        if (management.getGraphIndex(globalIndexName) == null) {
+            JanusGraphManagement.IndexBuilder builder = management.buildIndex(globalIndexName, Vertex.class);
+            builder.addKey(statusKey, Mapping.STRING.asParameter());
+            builder.addKey(transactionKey, Mapping.STRING.asParameter());
+            builder.buildMixedIndex("search");
+            management.commit();
+
+            management = janusGraph.openManagement();
+            GraphIndexStatusReport report = ManagementSystem.awaitGraphIndexStatus(janusGraph, globalIndexName).status(SchemaStatus.ENABLED).call();
+            LOG.info("Initial index status: {}", report);
+        }
+
+        management.commit();
+    }
+
     @Override
     public void createEntityDefinition(EntityDefinition definition) {
+
+        StandardJanusGraph standard = (StandardJanusGraph) janusGraph;
+        Set<? extends JanusGraphTransaction> transactions = standard.getOpenTransactions();
+        LOG.info("Got open transactions: {}", transactions);
+        for (JanusGraphTransaction transaction : transactions) {
+            transaction.rollback();
+            transaction.close();
+        }
+
         var tx = traversalSource.tx();
         boolean foundVertex = traversalSource.V().hasLabel(SCHEMA_LABEL).has("name", definition.getName()).hasNext();
         tx.close();
@@ -125,6 +172,7 @@ public class SchemaManagerImpl implements SchemaManager, EntryAddedListener<Stri
             propertyKeyNames.add(propertyKeyName);
         }
 
+        // create the entity index
         VertexLabel entityTypeLabel = management.getVertexLabel(definition.getName());
         Set<PropertyKey> keys = propertyKeyNames.stream().map(management::getPropertyKey).collect(Collectors.toSet());
         JanusGraphManagement.IndexBuilder builder = management.buildIndex(definition.getName(), Vertex.class);
@@ -135,12 +183,11 @@ public class SchemaManagerImpl implements SchemaManager, EntryAddedListener<Stri
                 builder = builder.addKey(propertyKey);
             }
         }
-
         builder.indexOnly(entityTypeLabel).buildMixedIndex("search");
-        management.commit();
 
-        // reindex
+        management.commit();
         management = janusGraph.openManagement();
+
         try {
             GraphIndexStatusReport report = ManagementSystem.awaitGraphIndexStatus(janusGraph, definition.getName()).status(SchemaStatus.ENABLED).call();
             LOG.info("Index status: {}", report);
@@ -201,6 +248,7 @@ public class SchemaManagerImpl implements SchemaManager, EntryAddedListener<Stri
 
         traversal.iterate();
         tx.commit();
+        tx.close();
 
         LOG.info("Created definition {}", definition);
         signalEntitySchemaChange();

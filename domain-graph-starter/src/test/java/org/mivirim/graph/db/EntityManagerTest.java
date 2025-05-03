@@ -1,12 +1,16 @@
 package org.mivirim.graph.db;
 
 import com.hazelcast.map.IMap;
+import org.apache.tinkerpop.gremlin.process.traversal.Traversal;
+import org.apache.tinkerpop.gremlin.process.traversal.dsl.graph.GraphTraversal;
 import org.apache.tinkerpop.gremlin.process.traversal.dsl.graph.GraphTraversalSource;
+import org.apache.tinkerpop.gremlin.process.traversal.dsl.graph.__;
+import org.apache.tinkerpop.gremlin.structure.Vertex;
 import org.janusgraph.core.JanusGraph;
+import org.janusgraph.core.JanusGraphFactory;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import org.mivirim.graph.JanusAutoConfiguration;
 import org.mivirim.graph.cluster.ClusterService;
 import org.mivirim.graph.db.impl.EntityManagerImpl;
 import org.mivirim.graph.db.mutation.EntityMutation;
@@ -19,35 +23,54 @@ import org.mivirim.graph.db.schema.impl.SchemaManagerImpl;
 import org.mivirim.graph.db.storage.BinaryStorageAdapter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
 
+import java.io.File;
+import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Set;
+import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
 
-@SpringBootTest(classes = JanusAutoConfiguration.class)
 @DisplayName("An entity manager")
 public class EntityManagerTest {
 
     private static final Logger LOG = LoggerFactory.getLogger(EntityManagerTest.class);
 
-    @Autowired
     private GraphTraversalSource traversalSource;
-
-    @Autowired
     private JanusGraph janusGraph;
 
     @BeforeEach
-    public void init() {
+    public void init() throws IOException {
+        if (janusGraph != null && janusGraph.isOpen()) {
+            janusGraph.close();
+        }
+
+        String indexPath;
+        do {
+            String tmpId = UUID.randomUUID().toString().substring(0, 8);
+            indexPath = "target/db/lucene-test-" + tmpId;
+        } while (new File(indexPath).exists());
+
+
+        File indexDir = new File(indexPath);
+        janusGraph = JanusGraphFactory.build()
+                .set("storage.backend", "inmemory")
+                .set("index.search.backend", "lucene")
+                .set("index.search.directory", indexPath)
+                .open();
+        traversalSource = janusGraph.traversal();
         try {
             traversalSource.V().drop().next();
         } catch (NoSuchElementException nee) { }
@@ -68,15 +91,7 @@ public class EntityManagerTest {
         assertNotNull(transaction, "null transaction");
     }
 
-    @Test
-    @DisplayName("should store all allowed data types")
-    public void testStoreAllDataTypes() {
-        BinaryStorageAdapter adapter = mock(BinaryStorageAdapter.class);
-        EntityManager manager = new EntityManagerImpl(traversalSource, adapter);
-        ClusterService clusterService = mock(ClusterService.class);
-        doReturn(mock(IMap.class)).when(clusterService).getMap(anyString());
-        SchemaManager schemaManager = new SchemaManagerImpl(janusGraph, traversalSource, clusterService);
-
+    private void setUpSchema(SchemaManager schemaManager) {
         EntityDefinition entityDefinition = new EntityDefinition();
         entityDefinition.setName("Photo");
 
@@ -89,7 +104,59 @@ public class EntityManagerTest {
         entityDefinition.setProperties(Set.of(nameDefinition, numberDefinition, booleanDefinition, dateDefinition, doublePropertyDefinition, intListDefinition));
 
         schemaManager.createEntityDefinition(entityDefinition);
+    }
 
+    @Test
+    @DisplayName("should mark new entities as uncommitted")
+    void testMarkNewEntitiesAsUncommitted() {
+        BinaryStorageAdapter adapter = mock(BinaryStorageAdapter.class);
+        EntityManager manager = new EntityManagerImpl(traversalSource, adapter);
+        ClusterService clusterService = mock(ClusterService.class);
+        doReturn(mock(IMap.class)).when(clusterService).getMap(anyString());
+        SchemaManager schemaManager = new SchemaManagerImpl(janusGraph, traversalSource, clusterService);
+        setUpSchema(schemaManager);
+
+        EntityMutation entityMutation = new EntityMutation()
+                .entityType("Photo")
+                .stringProperty("name", "photo1.jpg");
+        MutationRequest request = new MutationRequest(Set.of(entityMutation), Set.of());
+        Transaction t = manager.executeMutation(request);
+
+        Map<Object, Object> valueMap = traversalSource.V().hasLabel("Photo").valueMap().next();
+        List<String> status = (List<String>) valueMap.get("status");
+        assertEquals(1, status.size());
+        assertEquals("UNCOMMITTED", status.get(0));
+    }
+
+    @Test
+    @DisplayName("should be able to abort a mutation transaction")
+    void testRollback() {
+        BinaryStorageAdapter adapter = mock(BinaryStorageAdapter.class);
+        EntityManager manager = new EntityManagerImpl(traversalSource, adapter);
+        ClusterService clusterService = mock(ClusterService.class);
+        doReturn(mock(IMap.class)).when(clusterService).getMap(anyString());
+        SchemaManager schemaManager = new SchemaManagerImpl(janusGraph, traversalSource, clusterService);
+        setUpSchema(schemaManager);
+
+        EntityMutation entityMutation = new EntityMutation()
+                .entityType("Photo")
+                .stringProperty("name", "photo1.jpg");
+        MutationRequest request = new MutationRequest(Set.of(entityMutation), Set.of());
+        Transaction t = manager.executeMutation(request);
+        manager.abort(t);
+
+        assertFalse(traversalSource.V().has("transactionId", t.getId()).hasNext(), "found results with transaction id " + t.getId());
+    }
+
+    @Test
+    @DisplayName("should store all allowed data types")
+    public void testStoreAllDataTypes() {
+        BinaryStorageAdapter adapter = mock(BinaryStorageAdapter.class);
+        EntityManager manager = new EntityManagerImpl(traversalSource, adapter);
+        ClusterService clusterService = mock(ClusterService.class);
+        doReturn(mock(IMap.class)).when(clusterService).getMap(anyString());
+        SchemaManager schemaManager = new SchemaManagerImpl(janusGraph, traversalSource, clusterService);
+        setUpSchema(schemaManager);
 
         Date now = new Date();
 
@@ -107,9 +174,12 @@ public class EntityManagerTest {
                 .dateListProperty("dateList", List.of(now))
                 .stringListProperty("stringList", List.of("s1"));
         MutationRequest request = new MutationRequest(Set.of(entityMutation), Set.of());
-        manager.executeMutation(request);
+        Transaction t = manager.executeMutation(request);
+        manager.commit(t);
 
         Map<Object, Object> valueMap = traversalSource.V().hasLabel("Photo").valueMap().next();
+        assertEquals(List.of("NORMAL"), valueMap.get("status"));
+        assertEquals(List.of(t.getId()), valueMap.get("transactionId"));
         assertEquals(List.of("photo1.jpg"), valueMap.get("Photo_name"));
         assertEquals(List.of(5), valueMap.get("Photo_number"));
         assertEquals(List.of(true), valueMap.get("Photo_boolean"));
@@ -121,6 +191,90 @@ public class EntityManagerTest {
         assertEquals(List.of(1.0, 2.0, 3.0),valueMap.get("Photo_doubleList"));
         assertEquals(List.of(now), valueMap.get("Photo_dateList"));
         assertEquals(List.of("s1"), valueMap.get("Photo_stringList"));
+    }
+
+    private Traversal<Vertex, Map<String, Object>> propertiesAndRelationshipTraversal(GraphTraversal<Vertex, Vertex> start) {
+        return start.project("id", "props", "out", "in")
+                .by(__.id())
+                .by(__.valueMap())
+                .by(__.choose(
+                                __.outE().count().is(0),
+
+                                __.constant(new HashMap<>()),
+
+                                __.outE()
+                                        .unfold()
+                                        .project("label", "info")
+                                        .by(__.label())
+                                        .by(__.project("properties", "target")
+                                                .by(__.valueMap())
+                                                .by(__.inV().elementMap())
+                                        )
+                                        .group().by("label").by("info")
+                        )
+                )
+                .by(__.choose(
+                                __.inE().count().is(0),
+
+                                __.constant(new HashMap<>()),
+
+                                __.inE()
+                                        .unfold()
+                                        .project("label", "info")
+                                        .by(__.label())
+                                        .by(__.project("properties", "source")
+                                                .by(__.valueMap())
+                                                .by(__.inV().elementMap())
+                                        )
+                                        .group().by("label").by("info")
+
+
+                        )
+                );
+    }
+
+    @Test
+    @DisplayName("should be able to update an entity")
+    public void testUpdateEntity() {
+        BinaryStorageAdapter adapter = mock(BinaryStorageAdapter.class);
+        EntityManager manager = new EntityManagerImpl(traversalSource, adapter);
+        ClusterService clusterService = mock(ClusterService.class);
+        doReturn(mock(IMap.class)).when(clusterService).getMap(anyString());
+        SchemaManager schemaManager = new SchemaManagerImpl(janusGraph, traversalSource, clusterService);
+        setUpSchema(schemaManager);
+
+        EntityMutation entityMutation = new EntityMutation()
+                .entityType("Photo")
+                .stringProperty("name", "photo1.jpg");
+        MutationRequest request = new MutationRequest(Set.of(entityMutation), Set.of());
+        Transaction t = manager.executeMutation(request);
+        manager.commit(t);
+
+        Vertex v = traversalSource.V().hasLabel("Photo").next();
+        entityMutation.id(v.id()).stringProperty("name", "photo2.jpg");
+        t = manager.executeMutation(request);
+
+        var uncommittedTraversal = propertiesAndRelationshipTraversal(traversalSource.V().hasLabel("Photo").has("Photo_name", "photo2.jpg"));
+        assertTrue(uncommittedTraversal.hasNext(), "did not find uncommitted update");
+        var uncommittedEntity = uncommittedTraversal.next();
+
+        HashMap<String, Object> props = (HashMap<String, Object>)uncommittedEntity.get("props");
+        ArrayList<String> status = (ArrayList)props.get("status");
+        assertEquals(List.of("UNCOMMITTED"), status);
+
+        manager.commit(t);
+
+        var version1Traversal = propertiesAndRelationshipTraversal(traversalSource.V().hasLabel("Photo").has("Photo_name", "photo1.jpg"));
+        assertTrue(version1Traversal.hasNext(), "version 1 not found");
+        var v1 = version1Traversal.next();
+
+        var version2Traversal = propertiesAndRelationshipTraversal(traversalSource.V().hasLabel("Photo").has("Photo_name", "photo2.jpg"));
+
+        assertTrue(version2Traversal.hasNext(), "version 2 not found");
+        var v2 = version2Traversal.next();
+
+        LOG.info("checking");
+
     }
 
 }

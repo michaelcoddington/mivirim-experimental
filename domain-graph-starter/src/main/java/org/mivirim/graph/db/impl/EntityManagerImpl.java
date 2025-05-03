@@ -2,9 +2,13 @@ package org.mivirim.graph.db.impl;
 
 import org.apache.tinkerpop.gremlin.process.traversal.dsl.graph.GraphTraversal;
 import org.apache.tinkerpop.gremlin.process.traversal.dsl.graph.GraphTraversalSource;
+import org.apache.tinkerpop.gremlin.process.traversal.dsl.graph.__;
 import org.apache.tinkerpop.gremlin.structure.Vertex;
 import org.apache.tinkerpop.gremlin.structure.VertexProperty;
+import org.mivirim.graph.LabelConstants;
 import org.mivirim.graph.db.EntityManager;
+import org.mivirim.graph.db.EntityStatus;
+import org.mivirim.graph.db.PropertyConstants;
 import org.mivirim.graph.db.PropertyNameTranslator;
 import org.mivirim.graph.db.Transaction;
 import org.mivirim.graph.db.mutation.EntityMutation;
@@ -50,6 +54,8 @@ public class EntityManagerImpl implements EntityManager {
         traversalSource.E().drop();
         transaction.commit();
         transaction.close();
+
+        // TODO: resetting the graph should also drop the property keys and indexes
     }
 
     /* -------------------------------- Binary methods -------------------------------- */
@@ -115,19 +121,59 @@ public class EntityManagerImpl implements EntityManager {
 
             uids.add(sourceId);
 
-            traversal = traversalSource.addV(entityMutation.getEntityType()).as(sourceId).property("uid", sourceId);
+            // if the entity ID has been supplied, this is an update (a new version of an existing node),
+            // otherwise it is the creation of a new entity
 
-            for (Property property : entityMutation.getProperties()) {
-                String translatedPropertyName = PropertyNameTranslator.externalPropertyNameToInternalName(entityMutation.getEntityType(), property.getName());
-                if (property instanceof ScalarProperty<?, ?> scalarProperty) {
-                    traversal = traversal.property(translatedPropertyName, scalarProperty.getValue());
-                } else if (property instanceof ListProperty<?> listProperty) {
-                    for (Object value : listProperty.getValues()) {
-                        traversal = traversal.property(VertexProperty.Cardinality.list, translatedPropertyName, value);
+            if (entityMutation.getId() == null) {
+                traversal = traversalSource.addV(entityMutation.getEntityType()).as(sourceId)
+                        .property(PropertyConstants.UNIQUE_ID_PROPERTY, sourceId)
+                        .property(PropertyConstants.VERSION_PROPERTY, 1);
+
+                // TODO: this is duplicated below.  FIX THAT
+                traversal = traversal.property(PropertyConstants.STATUS_PROPERTY, EntityStatus.UNCOMMITTED.toString());
+                traversal = traversal.property(PropertyConstants.TRANSACTION_ID_PROPERTY, t.getId());
+
+                for (Property property : entityMutation.getProperties()) {
+                    String translatedPropertyName = PropertyNameTranslator.externalPropertyNameToInternalName(entityMutation.getEntityType(), property.getName());
+                    if (property instanceof ScalarProperty<?, ?> scalarProperty) {
+                        traversal = traversal.property(translatedPropertyName, scalarProperty.getValue());
+                    } else if (property instanceof ListProperty<?> listProperty) {
+                        for (Object value : listProperty.getValues()) {
+                            traversal = traversal.property(VertexProperty.Cardinality.list, translatedPropertyName, value);
+                        }
+                    } else {
+                        throw new IllegalArgumentException("Unsupported property type: " + property.getClass());
                     }
-                } else {
-                    throw new IllegalArgumentException("Unsupported property type: " + property.getClass());
                 }
+            } else {
+                // copy the entity vertex and copy all of its properties except for the version
+                var startId = String.format("%s-start", sourceId);
+                var newId = String.format("%s-new", sourceId);
+                var startPropsId = String.format("%s-start-props", sourceId);
+                traversal = traversalSource.V(entityMutation.getId()).as(startId)
+                        .addV(__.select(startId).label()).as(newId)
+                        .property(PropertyConstants.UNIQUE_ID_PROPERTY, sourceId)
+                        .sideEffect(
+                                __.select(startId).properties().as(startPropsId).select(newId).property(__.select(startPropsId).key(), __.select(startPropsId).value())
+                        )
+                        .property(PropertyConstants.VERSION_PROPERTY, null);
+                traversal = traversal.property(PropertyConstants.STATUS_PROPERTY, EntityStatus.UNCOMMITTED.toString());
+                traversal = traversal.property(PropertyConstants.TRANSACTION_ID_PROPERTY, t.getId());
+
+                for (Property property : entityMutation.getProperties()) {
+                    String translatedPropertyName = PropertyNameTranslator.externalPropertyNameToInternalName(entityMutation.getEntityType(), property.getName());
+                    if (property instanceof ScalarProperty<?, ?> scalarProperty) {
+                        traversal = traversal.property(translatedPropertyName, scalarProperty.getValue());
+                    } else if (property instanceof ListProperty<?> listProperty) {
+                        for (Object value : listProperty.getValues()) {
+                            traversal = traversal.property(VertexProperty.Cardinality.list, translatedPropertyName, value);
+                        }
+                    } else {
+                        throw new IllegalArgumentException("Unsupported property type: " + property.getClass());
+                    }
+                }
+                traversal = traversal.addE(LabelConstants.IS_UPDATE_TO_LABEL).from(newId).to(startId).outV();
+
             }
         }
 
@@ -142,12 +188,39 @@ public class EntityManagerImpl implements EntityManager {
 
     @Override
     public void commit(Transaction transaction) {
-        throw new RuntimeException("Not implemented yet");
+        var tx = traversalSource.tx();
+        tx.begin();
+        traversalSource.V()
+                .has(PropertyConstants.STATUS_PROPERTY, EntityStatus.UNCOMMITTED.toString())
+                .has(PropertyConstants.TRANSACTION_ID_PROPERTY, transaction.getId())
+                .as("source")
+                .property(PropertyConstants.STATUS_PROPERTY, EntityStatus.NORMAL.toString())
+                .optional(
+                        __.outE(LabelConstants.IS_UPDATE_TO_LABEL)
+                                .as("e1")
+                                .inV()
+                                .as("target")
+                                .select("source")
+                                .property("version", __.select("target").values("version").math("_ + 1"))
+                                .addE(LabelConstants.HAS_PREVIOUS_VERSION_LABEL).from("source").to("target")
+                                .select("e1").drop()
+                                .select("source")
+                )
+                .iterate();
+        tx.commit();
+        tx.close();
     }
 
     @Override
     public void abort(Transaction transaction) {
-        throw new RuntimeException("Not implemented yet");
+        var tx = traversalSource.tx();
+        tx.begin();
+        traversalSource.V()
+                .has(PropertyConstants.TRANSACTION_ID_PROPERTY, transaction.getId())
+                .drop()
+                .iterate();
+        tx.commit();
+        tx.close();
     }
 
     @Override
