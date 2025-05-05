@@ -1,13 +1,14 @@
 package org.mivirim.graph.db.impl;
 
+import com.google.common.collect.Streams;
 import org.apache.tinkerpop.gremlin.process.traversal.dsl.graph.GraphTraversal;
 import org.apache.tinkerpop.gremlin.process.traversal.dsl.graph.GraphTraversalSource;
 import org.apache.tinkerpop.gremlin.process.traversal.dsl.graph.__;
 import org.apache.tinkerpop.gremlin.structure.Vertex;
 import org.apache.tinkerpop.gremlin.structure.VertexProperty;
-import org.mivirim.graph.LabelConstants;
 import org.mivirim.graph.db.EntityManager;
 import org.mivirim.graph.db.EntityStatus;
+import org.mivirim.graph.db.LabelConstants;
 import org.mivirim.graph.db.PropertyConstants;
 import org.mivirim.graph.db.PropertyNameTranslator;
 import org.mivirim.graph.db.Transaction;
@@ -25,13 +26,15 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Date;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
-import static org.mivirim.graph.LabelConstants.DATA_LABEL;
+import static org.mivirim.graph.db.LabelConstants.DATA_LABEL;
 
 @Service
 public class EntityManagerImpl implements EntityManager {
@@ -111,10 +114,10 @@ public class EntityManagerImpl implements EntityManager {
         var transaction = traversalSource.tx();
         transaction.begin();
 
-        // TODO: this will need to be unique within the graph!
         Set<String> uids = new HashSet<>();
 
         GraphTraversal<Vertex, Vertex> traversal = null;
+
         for (EntityMutation entityMutation : mutationRequest.getEntityMutations()) {
             String sourceId;
             do {
@@ -123,32 +126,57 @@ public class EntityManagerImpl implements EntityManager {
 
             uids.add(sourceId);
 
-            // if the entity ID has been supplied, this is an update (a new version of an existing node),
-            // otherwise it is the creation of a new entity
-
             if (entityMutation.getId() == null) {
-                traversal = traversalSource.addV(entityMutation.getEntityType()).as(sourceId)
-                        .property(PropertyConstants.UNIQUE_ID_PROPERTY, sourceId)
-                        .property(PropertyConstants.VERSION_PROPERTY, 1);
-                traversal = traversal.property(PropertyConstants.STATUS_PROPERTY, EntityStatus.UNCOMMITTED.toString());
-                traversal = traversal.property(PropertyConstants.TRANSACTION_ID_PROPERTY, t.getId());
+                if (traversal == null) {
+                    traversal = traversalSource.addV(entityMutation.getEntityType()).as(sourceId);
+                } else {
+                    traversal = traversal.addV(entityMutation.getEntityType()).as(sourceId);
+                }
+
+                traversal = traversal.property(PropertyConstants.UNIQUE_ID_PROPERTY, sourceId)
+                        .property(PropertyConstants.VERSION_PROPERTY, 1)
+                        .property(PropertyConstants.STATUS_PROPERTY, EntityStatus.UNCOMMITTED.toString())
+                        .property(PropertyConstants.TRANSACTION_ID_PROPERTY, t.getId());
                 traversal = applyMutations(traversal, entityMutation);
             } else {
-                // copy the entity vertex and copy all of its properties except for the version
-                var startId = String.format("%s-start", sourceId);
-                var newId = String.format("%s-new", sourceId);
-                var startPropsId = String.format("%s-start-props", sourceId);
-                traversal = traversalSource.V(entityMutation.getId()).as(startId)
-                        .addV(__.select(startId).label()).as(newId)
-                        .sideEffect(
-                                __.select(startId).properties().as(startPropsId).select(newId).property(__.select(startPropsId).key(), __.select(startPropsId).value())
-                        );
-                traversal = applyMutations(traversal, entityMutation);
-                traversal = traversal.property(PropertyConstants.UNIQUE_ID_PROPERTY, sourceId);
-                traversal = traversal.property(PropertyConstants.VERSION_PROPERTY, null);
-                traversal = traversal.property(PropertyConstants.STATUS_PROPERTY, EntityStatus.UNCOMMITTED.toString());
-                traversal = traversal.property(PropertyConstants.TRANSACTION_ID_PROPERTY, t.getId());
-                traversal = traversal.addE(LabelConstants.IS_UPDATE_TO_LABEL).from(newId).to(startId).outV();
+                String targetLabel = "target";
+                if (traversal == null) {
+                    traversal = traversalSource.V(entityMutation.getId()).as(targetLabel);
+                } else {
+                    traversal = traversal.V(entityMutation.getId()).as(targetLabel);
+                }
+                traversal = traversal.addV(LabelConstants.REVISION_LABEL)
+                        .property(PropertyConstants.TRANSACTION_ID_PROPERTY, t.getId())
+                        .property(PropertyConstants.UNIQUE_ID_PROPERTY, sourceId)
+                        .as(sourceId);
+
+                Set<String> deletedProperties = new HashSet<>();
+                for (Property property : entityMutation.getProperties()) {
+                    String translatedPropertyName = PropertyNameTranslator.externalPropertyNameToInternalName(entityMutation.getEntityType(), property.getName());
+                    if (property instanceof ScalarProperty<?, ?> scalarProperty) {
+                        LOG.info("Applying scalar property {}", translatedPropertyName);
+                        if (scalarProperty.getValue() == null) {
+                            deletedProperties.add(translatedPropertyName);
+                        } else {
+                            traversal = traversal.property(translatedPropertyName, scalarProperty.getValue());
+                        }
+                    } else if (property instanceof ListProperty<?> listProperty) {
+                        LOG.info("Applying list property {}", translatedPropertyName);
+                        if (listProperty.getValues() == null || listProperty.getValues().isEmpty()) {
+                            deletedProperties.add(translatedPropertyName);
+                        } else {
+                            for (Object value : listProperty.getValues()) {
+                                traversal = traversal.property(VertexProperty.Cardinality.list, translatedPropertyName, value);
+                            }
+                        }
+                    } else {
+                        throw new IllegalArgumentException("Unsupported property type: " + property.getClass());
+                    }
+                }
+                for (String deletedProperty : deletedProperties) {
+                    traversal = traversal.property(PropertyConstants.DELETED_PROPERTY_NAME, deletedProperty);
+                }
+                traversal = traversal.addE(LabelConstants.IS_REVISION_OF_LABEL).from(sourceId).to(targetLabel).outV();
             }
         }
 
@@ -160,6 +188,82 @@ public class EntityManagerImpl implements EntityManager {
         transaction.close();
 
         return t;
+    }
+
+    @Override
+    public void prepare(Transaction transaction) {
+        LOG.info("Preparing transaction {}", transaction.getId());
+        long now = new Date().getTime();
+
+        var tx = traversalSource.tx();
+        tx.begin();
+
+        var revisionIter = traversalSource.V()
+                .has(PropertyConstants.TRANSACTION_ID_PROPERTY)
+                .hasLabel(LabelConstants.REVISION_LABEL)
+                .project("id", "revisionOf", "properties")
+                .by(__.id())
+                .by(__.out(LabelConstants.IS_REVISION_OF_LABEL).id())
+                .by(__.valueMap());
+
+        GraphTraversal<Vertex, Vertex> traversal = null;
+
+        List<Map<String, Object>> revisions = Streams.stream(revisionIter).toList();
+        for (Map<String, Object> revision : revisions) {
+            Object revisionId = revision.get("id");
+            Object entityId = revision.get("revisionOf");
+            Map<String, Object> properties = (Map<String, Object>) revision.get("properties");
+            List<String> deletedProperties = (List<String>) properties.getOrDefault(PropertyConstants.DELETED_PROPERTY_NAME, new ArrayList<>());
+            if (!deletedProperties.isEmpty()) {
+                deletedProperties.add(PropertyConstants.DELETED_PROPERTY_NAME);
+            }
+
+            LOG.info("Applying revision {}", revision);
+            // copy the target entity to a new version
+            var currentLabel = String.format("%s-current", entityId);
+            var newLabel = String.format("%s-new", entityId);
+            var revisionLabel = String.format("%s-revision", revisionId);
+            var currentPropsId = String.format("%s-start-props", entityId);
+            var revisionPropsId = String.format("%s-revision-props", revisionId);
+
+            if (traversal == null) {
+                traversal = traversalSource.V(revisionId).as(revisionLabel);
+            } else {
+                traversal = traversal.V(revisionId).as(revisionLabel);
+            }
+            traversal = traversal.V(entityId).as(currentLabel);
+
+            // creates a new vertex with the same label and properties as the current version
+            traversal = traversal.addV(__.select(currentLabel).label()).as(newLabel)
+                    .sideEffect(
+                            __.select(currentLabel).properties().as(currentPropsId).select(newLabel).property(__.select(currentPropsId).key(), __.select(currentPropsId).value())
+                    );
+
+            // copy the properties from the revision to the new vertex
+            traversal = traversal.sideEffect(
+                    __.select(revisionLabel).properties().as(revisionPropsId).select(newLabel).property(__.select(revisionPropsId).key(), __.select(revisionPropsId).value())
+            );
+
+            traversal = traversal.property(PropertyConstants.UNIQUE_ID_PROPERTY, __.select(revisionLabel).values(PropertyConstants.UNIQUE_ID_PROPERTY));
+            traversal = traversal.property(PropertyConstants.VERSION_PROPERTY, __.select(currentLabel).values(PropertyConstants.VERSION_PROPERTY).math("_ + 1"));
+            traversal = traversal.property(PropertyConstants.STATUS_PROPERTY, EntityStatus.UNCOMMITTED.toString());
+            for (String deletedProperty : deletedProperties) {
+                traversal = traversal.property(deletedProperty, null);
+            }
+            traversal = traversal.addE(LabelConstants.HAS_PREVIOUS_VERSION_LABEL).from(newLabel).to(currentLabel).outV();
+
+            // drop the revision vertex and reposition back at the new vertex
+            traversal = traversal.select(revisionLabel).drop().V(entityId);
+        }
+
+        while (traversal != null && traversal.hasNext()) {
+            LOG.info("Got traversal result {}", traversal.next());
+        }
+
+        tx.commit();
+        tx.close();
+
+        LOG.info("Prepared transaction {} in {} ms", transaction.getId(), (new Date().getTime() - now) / 1000);
     }
 
     private GraphTraversal<Vertex, Vertex> applyMutations(GraphTraversal<Vertex, Vertex> traversal, EntityMutation entityMutation) {
@@ -182,27 +286,18 @@ public class EntityManagerImpl implements EntityManager {
 
     @Override
     public void commit(Transaction transaction) {
-        var tx = traversalSource.tx();
-        tx.begin();
         LOG.info("Committing transaction {}", transaction.getId());
         long now = new Date().getTime();
+
+        var tx = traversalSource.tx();
+        tx.begin();
+
         traversalSource.V()
                 .has(PropertyConstants.STATUS_PROPERTY, EntityStatus.UNCOMMITTED.toString())
                 .has(PropertyConstants.TRANSACTION_ID_PROPERTY, transaction.getId())
-                .as("source")
                 .property(PropertyConstants.STATUS_PROPERTY, EntityStatus.NORMAL.toString())
-                .optional(
-                        __.outE(LabelConstants.IS_UPDATE_TO_LABEL)
-                                .as("e1")
-                                .inV()
-                                .as("target")
-                                .select("source")
-                                .property("version", __.select("target").values("version").math("_ + 1"))
-                                .addE(LabelConstants.HAS_PREVIOUS_VERSION_LABEL).from("source").to("target")
-                                .select("e1").drop()
-                                .select("source")
-                )
                 .iterate();
+
         tx.commit();
         tx.close();
         LOG.info("Committed transaction {} in {} ms", transaction.getId(), (new Date().getTime() - now) / 1000);

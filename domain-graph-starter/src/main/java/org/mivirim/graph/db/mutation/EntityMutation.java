@@ -41,7 +41,7 @@ public class EntityMutation {
         return this;
     }
 
-    public EntityMutation intProperty(String name, int value) {
+    public EntityMutation intProperty(String name, Integer value) {
         properties.put(name, new IntProperty(name, value));
         return this;
     }

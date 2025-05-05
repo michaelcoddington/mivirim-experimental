@@ -34,6 +34,8 @@ public interface EntityManager {
      */
     Transaction executeMutation(MutationRequest mutationRequest);
 
+    void prepare(Transaction transaction);
+
     void commit(Transaction transaction);
 
     void abort(Transaction transaction);

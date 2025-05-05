@@ -22,7 +22,7 @@ import org.janusgraph.graphdb.database.StandardJanusGraph;
 import org.janusgraph.graphdb.database.management.GraphIndexStatusReport;
 import org.janusgraph.graphdb.database.management.ManagementSystem;
 import org.mivirim.graph.DuplicateException;
-import org.mivirim.graph.LabelConstants;
+import org.mivirim.graph.db.LabelConstants;
 import org.mivirim.graph.cluster.ClusterService;
 import org.mivirim.graph.db.PropertyConstants;
 import org.mivirim.graph.db.PropertyNameTranslator;
@@ -48,7 +48,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-import static org.mivirim.graph.LabelConstants.SCHEMA_LABEL;
+import static org.mivirim.graph.db.LabelConstants.SCHEMA_LABEL;
 
 @Service
 public class SchemaManagerImpl implements SchemaManager, EntryAddedListener<String, Object>, EntryUpdatedListener<String, Object> {

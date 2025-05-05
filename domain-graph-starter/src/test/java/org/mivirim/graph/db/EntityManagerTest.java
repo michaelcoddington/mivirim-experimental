@@ -1,5 +1,6 @@
 package org.mivirim.graph.db;
 
+import com.google.common.collect.Streams;
 import com.hazelcast.map.IMap;
 import org.apache.tinkerpop.gremlin.process.traversal.Traversal;
 import org.apache.tinkerpop.gremlin.process.traversal.dsl.graph.GraphTraversal;
@@ -11,7 +12,6 @@ import org.janusgraph.core.JanusGraphFactory;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import org.mivirim.graph.LabelConstants;
 import org.mivirim.graph.cluster.ClusterService;
 import org.mivirim.graph.db.impl.EntityManagerImpl;
 import org.mivirim.graph.db.mutation.EntityMutation;
@@ -39,6 +39,7 @@ import java.util.UUID;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.doReturn;
@@ -179,6 +180,8 @@ public class EntityManagerTest {
                 .stringListProperty("stringList", List.of("s1"));
         MutationRequest request = new MutationRequest(Set.of(entityMutation), Set.of());
         Transaction t = manager.executeMutation(request);
+
+        manager.prepare(t);
         manager.commit(t);
 
         Map<Object, Object> valueMap = traversalSource.V().hasLabel("Photo").valueMap().next();
@@ -251,15 +254,22 @@ public class EntityManagerTest {
         LOG.info("Creating original entity");
         EntityMutation entityMutation = new EntityMutation()
                 .entityType("Photo")
-                .stringProperty("name", "photo1.jpg");
+                .stringProperty("name", "photo1.jpg")
+                .intProperty("number", 5);
         MutationRequest request = new MutationRequest(Set.of(entityMutation), Set.of());
         Transaction t = manager.executeMutation(request);
+        manager.prepare(t);
         manager.commit(t);
+
 
         LOG.info("Updating entity");
         Vertex v = traversalSource.V().hasLabel("Photo").next();
-        entityMutation.id(v.id()).stringProperty("name", "photo2.jpg");
+        entityMutation.id(v.id()).stringProperty("name", "photo2.jpg").intProperty("number", null).booleanProperty("boolean", false);
         t = manager.executeMutation(request);
+        manager.prepare(t);
+
+        var checkNodes = Streams.stream(traversalSource.V().valueMap()).toList();
+
         LOG.info("Updated entity");
 
         Traversal<Vertex, Map<String, Object>> uncommittedTraversal = propertiesAndRelationshipTraversal(traversalSource.V().hasLabel("Photo").has(PropertyConstants.TRANSACTION_ID_PROPERTY, t.getId()));
@@ -291,6 +301,11 @@ public class EntityManagerTest {
         Map<String, Object> firstInfo = v1HasPrevious.get(0);
         Map<String, Object> source = (Map<String, Object>) firstInfo.get("source");
         assertEquals(v1.get("id"), source.get("id"));
+
+        var v2Props = (Map<String, Object>)v2.get("props");
+        assertEquals(List.of(false), v2Props.get("Photo_boolean"));
+        assertEquals(List.of("photo2.jpg"), v2Props.get("Photo_name"));
+        assertNull(v2Props.get("Photo_number"));
     }
 
 }
