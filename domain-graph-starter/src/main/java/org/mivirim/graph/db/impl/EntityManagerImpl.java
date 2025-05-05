@@ -25,6 +25,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
+import java.util.Date;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
@@ -108,6 +109,7 @@ public class EntityManagerImpl implements EntityManager {
         Transaction t = new Transaction(UUID.randomUUID().toString());
 
         var transaction = traversalSource.tx();
+        transaction.begin();
 
         // TODO: this will need to be unique within the graph!
         Set<String> uids = new HashSet<>();
@@ -128,23 +130,9 @@ public class EntityManagerImpl implements EntityManager {
                 traversal = traversalSource.addV(entityMutation.getEntityType()).as(sourceId)
                         .property(PropertyConstants.UNIQUE_ID_PROPERTY, sourceId)
                         .property(PropertyConstants.VERSION_PROPERTY, 1);
-
-                // TODO: this is duplicated below.  FIX THAT
                 traversal = traversal.property(PropertyConstants.STATUS_PROPERTY, EntityStatus.UNCOMMITTED.toString());
                 traversal = traversal.property(PropertyConstants.TRANSACTION_ID_PROPERTY, t.getId());
-
-                for (Property property : entityMutation.getProperties()) {
-                    String translatedPropertyName = PropertyNameTranslator.externalPropertyNameToInternalName(entityMutation.getEntityType(), property.getName());
-                    if (property instanceof ScalarProperty<?, ?> scalarProperty) {
-                        traversal = traversal.property(translatedPropertyName, scalarProperty.getValue());
-                    } else if (property instanceof ListProperty<?> listProperty) {
-                        for (Object value : listProperty.getValues()) {
-                            traversal = traversal.property(VertexProperty.Cardinality.list, translatedPropertyName, value);
-                        }
-                    } else {
-                        throw new IllegalArgumentException("Unsupported property type: " + property.getClass());
-                    }
-                }
+                traversal = applyMutations(traversal, entityMutation);
             } else {
                 // copy the entity vertex and copy all of its properties except for the version
                 var startId = String.format("%s-start", sourceId);
@@ -152,44 +140,52 @@ public class EntityManagerImpl implements EntityManager {
                 var startPropsId = String.format("%s-start-props", sourceId);
                 traversal = traversalSource.V(entityMutation.getId()).as(startId)
                         .addV(__.select(startId).label()).as(newId)
-                        .property(PropertyConstants.UNIQUE_ID_PROPERTY, sourceId)
                         .sideEffect(
                                 __.select(startId).properties().as(startPropsId).select(newId).property(__.select(startPropsId).key(), __.select(startPropsId).value())
-                        )
-                        .property(PropertyConstants.VERSION_PROPERTY, null);
+                        );
+                traversal = applyMutations(traversal, entityMutation);
+                traversal = traversal.property(PropertyConstants.UNIQUE_ID_PROPERTY, sourceId);
+                traversal = traversal.property(PropertyConstants.VERSION_PROPERTY, null);
                 traversal = traversal.property(PropertyConstants.STATUS_PROPERTY, EntityStatus.UNCOMMITTED.toString());
                 traversal = traversal.property(PropertyConstants.TRANSACTION_ID_PROPERTY, t.getId());
-
-                for (Property property : entityMutation.getProperties()) {
-                    String translatedPropertyName = PropertyNameTranslator.externalPropertyNameToInternalName(entityMutation.getEntityType(), property.getName());
-                    if (property instanceof ScalarProperty<?, ?> scalarProperty) {
-                        traversal = traversal.property(translatedPropertyName, scalarProperty.getValue());
-                    } else if (property instanceof ListProperty<?> listProperty) {
-                        for (Object value : listProperty.getValues()) {
-                            traversal = traversal.property(VertexProperty.Cardinality.list, translatedPropertyName, value);
-                        }
-                    } else {
-                        throw new IllegalArgumentException("Unsupported property type: " + property.getClass());
-                    }
-                }
                 traversal = traversal.addE(LabelConstants.IS_UPDATE_TO_LABEL).from(newId).to(startId).outV();
-
             }
         }
 
         while (traversal != null && traversal.hasNext()) {
-            traversal.next();
+            LOG.info("Got traversal result {}", traversal.next());
         }
 
         transaction.commit();
+        transaction.close();
 
         return t;
+    }
+
+    private GraphTraversal<Vertex, Vertex> applyMutations(GraphTraversal<Vertex, Vertex> traversal, EntityMutation entityMutation) {
+        for (Property property : entityMutation.getProperties()) {
+            String translatedPropertyName = PropertyNameTranslator.externalPropertyNameToInternalName(entityMutation.getEntityType(), property.getName());
+            if (property instanceof ScalarProperty<?, ?> scalarProperty) {
+                LOG.info("Applying scalar property {}", translatedPropertyName);
+                traversal = traversal.property(translatedPropertyName, scalarProperty.getValue());
+            } else if (property instanceof ListProperty<?> listProperty) {
+                LOG.info("Applying list property {}", translatedPropertyName);
+                for (Object value : listProperty.getValues()) {
+                    traversal = traversal.property(VertexProperty.Cardinality.list, translatedPropertyName, value);
+                }
+            } else {
+                throw new IllegalArgumentException("Unsupported property type: " + property.getClass());
+            }
+        }
+        return traversal;
     }
 
     @Override
     public void commit(Transaction transaction) {
         var tx = traversalSource.tx();
         tx.begin();
+        LOG.info("Committing transaction {}", transaction.getId());
+        long now = new Date().getTime();
         traversalSource.V()
                 .has(PropertyConstants.STATUS_PROPERTY, EntityStatus.UNCOMMITTED.toString())
                 .has(PropertyConstants.TRANSACTION_ID_PROPERTY, transaction.getId())
@@ -209,6 +205,7 @@ public class EntityManagerImpl implements EntityManager {
                 .iterate();
         tx.commit();
         tx.close();
+        LOG.info("Committed transaction {} in {} ms", transaction.getId(), (new Date().getTime() - now) / 1000);
     }
 
     @Override

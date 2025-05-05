@@ -11,6 +11,7 @@ import org.janusgraph.core.JanusGraphFactory;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.mivirim.graph.LabelConstants;
 import org.mivirim.graph.cluster.ClusterService;
 import org.mivirim.graph.db.impl.EntityManagerImpl;
 import org.mivirim.graph.db.mutation.EntityMutation;
@@ -69,11 +70,14 @@ public class EntityManagerTest {
                 .set("storage.backend", "inmemory")
                 .set("index.search.backend", "lucene")
                 .set("index.search.directory", indexPath)
+                .set("cache.tx-cache-size", 0)
                 .open();
         traversalSource = janusGraph.traversal();
         try {
             traversalSource.V().drop().next();
         } catch (NoSuchElementException nee) { }
+
+        janusGraph.tx().close();
     }
 
     @Test
@@ -194,8 +198,9 @@ public class EntityManagerTest {
     }
 
     private Traversal<Vertex, Map<String, Object>> propertiesAndRelationshipTraversal(GraphTraversal<Vertex, Vertex> start) {
-        return start.project("id", "props", "out", "in")
+        return start.project("id", "label", "props", "out", "in")
                 .by(__.id())
+                .by(__.label())
                 .by(__.valueMap())
                 .by(__.choose(
                                 __.outE().count().is(0),
@@ -208,7 +213,7 @@ public class EntityManagerTest {
                                         .by(__.label())
                                         .by(__.project("properties", "target")
                                                 .by(__.valueMap())
-                                                .by(__.inV().elementMap())
+                                                .by(__.inV().project("id", "label", "props").by(__.id()).by(__.label()).by(__.valueMap()))
                                         )
                                         .group().by("label").by("info")
                         )
@@ -224,7 +229,7 @@ public class EntityManagerTest {
                                         .by(__.label())
                                         .by(__.project("properties", "source")
                                                 .by(__.valueMap())
-                                                .by(__.inV().elementMap())
+                                                .by(__.inV().project("id", "label", "props").by(__.id()).by(__.label()).by(__.valueMap()))
                                         )
                                         .group().by("label").by("info")
 
@@ -243,6 +248,7 @@ public class EntityManagerTest {
         SchemaManager schemaManager = new SchemaManagerImpl(janusGraph, traversalSource, clusterService);
         setUpSchema(schemaManager);
 
+        LOG.info("Creating original entity");
         EntityMutation entityMutation = new EntityMutation()
                 .entityType("Photo")
                 .stringProperty("name", "photo1.jpg");
@@ -250,12 +256,14 @@ public class EntityManagerTest {
         Transaction t = manager.executeMutation(request);
         manager.commit(t);
 
+        LOG.info("Updating entity");
         Vertex v = traversalSource.V().hasLabel("Photo").next();
         entityMutation.id(v.id()).stringProperty("name", "photo2.jpg");
         t = manager.executeMutation(request);
+        LOG.info("Updated entity");
 
-        var uncommittedTraversal = propertiesAndRelationshipTraversal(traversalSource.V().hasLabel("Photo").has("Photo_name", "photo2.jpg"));
-        assertTrue(uncommittedTraversal.hasNext(), "did not find uncommitted update");
+        Traversal<Vertex, Map<String, Object>> uncommittedTraversal = propertiesAndRelationshipTraversal(traversalSource.V().hasLabel("Photo").has(PropertyConstants.TRANSACTION_ID_PROPERTY, t.getId()));
+        assertTrue(uncommittedTraversal.hasNext());
         var uncommittedEntity = uncommittedTraversal.next();
 
         HashMap<String, Object> props = (HashMap<String, Object>)uncommittedEntity.get("props");
@@ -264,17 +272,25 @@ public class EntityManagerTest {
 
         manager.commit(t);
 
+        var allNodes = traversalSource.V().hasLabel("Photo").project("id", "label", "props").by(__.id()).by(__.label()).by(__.valueMap());
+        while (allNodes.hasNext()) {
+            var next = allNodes.next();
+            LOG.info("Next: {}", next);
+        }
+
         var version1Traversal = propertiesAndRelationshipTraversal(traversalSource.V().hasLabel("Photo").has("Photo_name", "photo1.jpg"));
         assertTrue(version1Traversal.hasNext(), "version 1 not found");
         var v1 = version1Traversal.next();
 
         var version2Traversal = propertiesAndRelationshipTraversal(traversalSource.V().hasLabel("Photo").has("Photo_name", "photo2.jpg"));
-
         assertTrue(version2Traversal.hasNext(), "version 2 not found");
         var v2 = version2Traversal.next();
 
-        LOG.info("checking");
-
+        HashMap<String, Object> v1Incoming = (HashMap<String, Object>)v1.get("in");
+        List<Map<String, Object>> v1HasPrevious = (List<Map<String, Object>>)v1Incoming.get(LabelConstants.HAS_PREVIOUS_VERSION_LABEL);
+        Map<String, Object> firstInfo = v1HasPrevious.get(0);
+        Map<String, Object> source = (Map<String, Object>) firstInfo.get("source");
+        assertEquals(v1.get("id"), source.get("id"));
     }
 
 }
