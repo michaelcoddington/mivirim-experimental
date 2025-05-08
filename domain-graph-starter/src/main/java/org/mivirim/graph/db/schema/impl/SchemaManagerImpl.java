@@ -22,8 +22,8 @@ import org.janusgraph.graphdb.database.StandardJanusGraph;
 import org.janusgraph.graphdb.database.management.GraphIndexStatusReport;
 import org.janusgraph.graphdb.database.management.ManagementSystem;
 import org.mivirim.graph.DuplicateException;
-import org.mivirim.graph.db.LabelConstants;
 import org.mivirim.graph.cluster.ClusterService;
+import org.mivirim.graph.db.LabelConstants;
 import org.mivirim.graph.db.PropertyConstants;
 import org.mivirim.graph.db.PropertyNameTranslator;
 import org.mivirim.graph.db.schema.EntityDefinition;
@@ -48,7 +48,8 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-import static org.mivirim.graph.db.LabelConstants.SCHEMA_LABEL;
+import static org.mivirim.graph.db.LabelConstants.ENTITY_DEFINITION_LABEL;
+import static org.mivirim.graph.db.LabelConstants.RELATIONSHIP_DEFINITION_LABEL;
 
 @Service
 public class SchemaManagerImpl implements SchemaManager, EntryAddedListener<String, Object>, EntryUpdatedListener<String, Object> {
@@ -80,11 +81,7 @@ public class SchemaManagerImpl implements SchemaManager, EntryAddedListener<Stri
         }
     }
 
-    @Override
-    public Set<EntityDefinition> retrieveEntityDefinitions() {
-        GraphTraversal<Vertex, Vertex> start = traversalSource.V().hasLabel(SCHEMA_LABEL);
-        return retrieveEntityDefinitions(start);
-    }
+
 
     public void verifyGlobalPropertiesAndIndexes() throws InterruptedException {
         JanusGraphManagement management = janusGraph.openManagement();
@@ -126,11 +123,11 @@ public class SchemaManagerImpl implements SchemaManager, EntryAddedListener<Stri
         }
 
         var tx = traversalSource.tx();
-        boolean foundVertex = traversalSource.V().hasLabel(SCHEMA_LABEL).has("name", definition.getName()).hasNext();
+        boolean foundVertex = traversalSource.V().hasLabel(ENTITY_DEFINITION_LABEL).has("name", definition.getName()).hasNext();
         tx.close();
 
         if (foundVertex) {
-            throw new DuplicateException(String.format("Schema vertex for entity %s already exists", definition.getName()));
+            throw new DuplicateException(String.format("Schema for entity %s already exists", definition.getName()));
         }
 
         // create the vertex label
@@ -163,7 +160,7 @@ public class SchemaManagerImpl implements SchemaManager, EntryAddedListener<Stri
                 case DOUBLE, DOUBLE_LIST -> Double.class;
             };
 
-            Cardinality cardinality = switch(propertyDefinition.getType()) {
+            Cardinality cardinality = switch (propertyDefinition.getType()) {
                 case STRING, INT, DATE, BOOLEAN, DOUBLE -> Cardinality.SINGLE;
                 case STRING_LIST, INT_LIST, DATE_LIST, BOOLEAN_LIST, DOUBLE_LIST -> Cardinality.LIST;
             };
@@ -200,7 +197,7 @@ public class SchemaManagerImpl implements SchemaManager, EntryAddedListener<Stri
 
         // create the schema vertices and edges
         tx = traversalSource.tx();
-        GraphTraversal<Vertex, ?> traversal = traversalSource.addV(SCHEMA_LABEL)
+        GraphTraversal<Vertex, ?> traversal = traversalSource.addV(ENTITY_DEFINITION_LABEL)
                 .property("name", definition.getName())
                 .property("description", definition.getDescription())
                 .as("schema");
@@ -208,10 +205,10 @@ public class SchemaManagerImpl implements SchemaManager, EntryAddedListener<Stri
         AtomicInteger vertexCount = new AtomicInteger(0);
 
         // add direct properties
-        for (PropertyDefinition p: definition.getProperties()) {
+        for (PropertyDefinition p : definition.getProperties()) {
             String ref = String.valueOf(vertexCount.getAndIncrement());
 
-            traversal = traversal.addV(LabelConstants.SCHEMA_PROPERTY_LABEL)
+            traversal = traversal.addV(LabelConstants.PROPERTY_DEFINITION_LABEL)
                     .property("name", p.getName())
                     .property("description", p.getDescription())
                     .property("type", p.getType().toString())
@@ -223,20 +220,20 @@ public class SchemaManagerImpl implements SchemaManager, EntryAddedListener<Stri
         // add property groups
         Set<PropertyGroupDefinition> propertyGroups = definition.getPropertyGroups() == null ? Set.of() : definition.getPropertyGroups();
 
-        for (PropertyGroupDefinition groupDefinition: propertyGroups) {
+        for (PropertyGroupDefinition groupDefinition : propertyGroups) {
             String groupRef = String.valueOf(vertexCount.getAndIncrement());
 
-            traversal = traversal.addV(LabelConstants.SCHEMA_PROPERTY_GROUP_LABEL)
+            traversal = traversal.addV(LabelConstants.PROPERTY_GROUP_DEFINITION_LABEL)
                     .property("name", groupDefinition.getName())
                     .property("description", groupDefinition.getDescription())
                     .as(groupRef);
             traversal = traversal.addE("has-property-group")
                     .from("schema").to(groupRef);
 
-            for (PropertyDefinition groupPropertyDef: groupDefinition.getProperties()) {
+            for (PropertyDefinition groupPropertyDef : groupDefinition.getProperties()) {
                 String ref = String.valueOf(vertexCount.getAndIncrement());
 
-                traversal = traversal.addV(LabelConstants.SCHEMA_PROPERTY_LABEL)
+                traversal = traversal.addV(LabelConstants.PROPERTY_DEFINITION_LABEL)
                         .property("name", groupPropertyDef.getName())
                         .property("description", groupPropertyDef.getDescription())
                         .property("type", groupPropertyDef.getType().toString())
@@ -251,7 +248,7 @@ public class SchemaManagerImpl implements SchemaManager, EntryAddedListener<Stri
         tx.close();
 
         LOG.info("Created definition {}", definition);
-        signalEntitySchemaChange();
+        signalSchemaChange();
 
     }
 
@@ -261,8 +258,14 @@ public class SchemaManagerImpl implements SchemaManager, EntryAddedListener<Stri
     }
 
     @Override
+    public Set<EntityDefinition> retrieveEntityDefinitions() {
+        GraphTraversal<Vertex, Vertex> start = traversalSource.V().hasLabel(ENTITY_DEFINITION_LABEL);
+        return retrieveEntityDefinitions(start);
+    }
+
+    @Override
     public Optional<EntityDefinition> retrieveEntityDefinition(String name) {
-        GraphTraversal<Vertex, Vertex> start = traversalSource.V().hasLabel(SCHEMA_LABEL).has("name", name);
+        GraphTraversal<Vertex, Vertex> start = traversalSource.V().hasLabel(ENTITY_DEFINITION_LABEL).has("name", name);
         Set<EntityDefinition> defs = retrieveEntityDefinitions(start);
         if (defs.isEmpty()) {
             return Optional.empty();
@@ -336,14 +339,82 @@ public class SchemaManagerImpl implements SchemaManager, EntryAddedListener<Stri
         throw new RuntimeException("not done");
     }
 
-    @Override
-    public Set<RelationshipDefinition> retrieveRelationshipDefinitions() {
-        return Set.of();
-    }
+
 
     @Override
     public void createRelationshipDefinition(RelationshipDefinition definition) {
-        throw new RuntimeException("not done");
+        var tx = traversalSource.tx();
+        boolean foundVertex = traversalSource.V().hasLabel(RELATIONSHIP_DEFINITION_LABEL).has("name", definition.getName()).hasNext();
+        tx.close();
+
+        if (foundVertex) {
+            throw new DuplicateException(String.format("Schema for relationship %s already exists", definition.getName()));
+        }
+
+        // create the schema vertices and edges
+        tx = traversalSource.tx();
+        GraphTraversal<Vertex, ?> traversal = traversalSource.addV(RELATIONSHIP_DEFINITION_LABEL)
+                .property("name", definition.getName())
+                .property("description", definition.getDescription())
+                .property("sourceEntity", definition.getSourceEntity())
+                .property("targetEntity", definition.getTargetEntity())
+                .property("targetCardinalityMin", definition.getTargetCardinality().getMin())
+                .property("targetCardinalityMax", definition.getTargetCardinality().getMax())
+                .property("sourceCardinalityMin", definition.getSourceCardinality().getMin())
+                .property("sourceCardinalityMax", definition.getSourceCardinality().getMax())
+                .property("sourceVersionAction", definition.getSourceVersionAction().toString())
+                .property("targetVersionAction", definition.getTargetVersionAction().toString())
+                .property("instanceMaxCardinality", definition.getInstanceMaxCardinality())
+                .as("schema");
+
+        AtomicInteger vertexCount = new AtomicInteger(0);
+
+        // add direct properties
+        for (PropertyDefinition p : definition.getProperties()) {
+            String ref = String.valueOf(vertexCount.getAndIncrement());
+
+            traversal = traversal.addV(LabelConstants.PROPERTY_DEFINITION_LABEL)
+                    .property("name", p.getName())
+                    .property("description", p.getDescription())
+                    .property("type", p.getType().toString())
+                    .as(ref);
+            traversal = traversal.addE("has-property")
+                    .from("schema").to(ref);
+        }
+
+        // add property groups
+        Set<PropertyGroupDefinition> propertyGroups = definition.getPropertyGroups() == null ? Set.of() : definition.getPropertyGroups();
+
+        for (PropertyGroupDefinition groupDefinition : propertyGroups) {
+            String groupRef = String.valueOf(vertexCount.getAndIncrement());
+
+            traversal = traversal.addV(LabelConstants.PROPERTY_GROUP_DEFINITION_LABEL)
+                    .property("name", groupDefinition.getName())
+                    .property("description", groupDefinition.getDescription())
+                    .as(groupRef);
+            traversal = traversal.addE("has-property-group")
+                    .from("schema").to(groupRef);
+
+            for (PropertyDefinition groupPropertyDef : groupDefinition.getProperties()) {
+                String ref = String.valueOf(vertexCount.getAndIncrement());
+
+                traversal = traversal.addV(LabelConstants.PROPERTY_DEFINITION_LABEL)
+                        .property("name", groupPropertyDef.getName())
+                        .property("description", groupPropertyDef.getDescription())
+                        .property("type", groupPropertyDef.getType().toString())
+                        .as(ref);
+                traversal = traversal.addE("has-property")
+                        .from(groupRef).to(ref);
+            }
+        }
+
+        traversal.iterate();
+        tx.commit();
+        tx.close();
+
+        LOG.info("Created definition {}", definition);
+        signalSchemaChange();
+
     }
 
     @Override
@@ -352,8 +423,67 @@ public class SchemaManagerImpl implements SchemaManager, EntryAddedListener<Stri
     }
 
     @Override
+    public Set<RelationshipDefinition> retrieveRelationshipDefinitions() {
+        GraphTraversal<Vertex, Vertex> start = traversalSource.V().hasLabel(RELATIONSHIP_DEFINITION_LABEL);
+        return retrieveRelationshipDefinitions(start);
+    }
+
+    private Set<RelationshipDefinition> retrieveRelationshipDefinitions(GraphTraversal<Vertex, Vertex> startingTraversal) {
+        var elementProjectionName = "elements";
+        var propertyNodeProjectionName = "propertyNodes";
+        var propertyGroupProjectionName = "propertyGroups";
+
+        GraphTraversal<Vertex, Map<String, Object>> iter = startingTraversal
+                .project(elementProjectionName, propertyNodeProjectionName, propertyGroupProjectionName)
+                // elements of the schema node
+                .by(__.elementMap())
+                // a list of the property nodes tied to the schema node
+                .by(__.out("has-property").elementMap().fold())
+                // a map of the property groups tied to the schema and the properties in them
+                .by(
+                        __.out("has-property-group")
+                                .project(elementProjectionName, propertyNodeProjectionName)
+                                .by(__.elementMap())
+                                .by(__.out("has-property").elementMap().fold())
+                                .fold()
+                );
+
+        return iter.toStream().map(v -> {
+            RelationshipDefinition schema = new RelationshipDefinition();
+            var propertyMap = (HashMap) v.get(elementProjectionName);
+            schema.setName((String) propertyMap.get("name"));
+            schema.setDescription((String) propertyMap.get("description"));
+            schema.setSourceEntity((String) propertyMap.get("sourceEntity"));
+            schema.setTargetEntity((String) propertyMap.get("targetEntity"));
+            schema.setSourceCardinality(new org.mivirim.graph.db.schema.Cardinality((Integer) propertyMap.get("sourceCardinalityMin"), (Integer) propertyMap.get("sourceCardinalityMax")));
+            schema.setTargetCardinality(new org.mivirim.graph.db.schema.Cardinality((Integer) propertyMap.get("targetCardinalityMin"), (Integer) propertyMap.get("targetCardinalityMax")));
+            schema.setInstanceMaxCardinality((Integer) propertyMap.get("instanceMaxCardinality"));
+            schema.setSourceVersionAction(RelationshipDefinition.VersionAction.valueOf((String) propertyMap.get("sourceVersionAction")));
+            schema.setTargetVersionAction(RelationshipDefinition.VersionAction.valueOf((String) propertyMap.get("targetVersionAction")));
+
+            ArrayList<Map<String, Object>> properties = (ArrayList) v.get(propertyNodeProjectionName);
+            Set<PropertyDefinition> schemaProps = properties.stream()
+                    .map(this::mapToPropertyDefinition).collect(Collectors.toSet());
+            schema.setProperties(schemaProps);
+
+            ArrayList<Map<String, Object>> propertyGroups = (ArrayList) v.get(propertyGroupProjectionName);
+            Set<PropertyGroupDefinition> groups = propertyGroups.stream()
+                    .map(this::mapToPropertyGroupDefinition)
+                    .collect(Collectors.toSet());
+            schema.setPropertyGroups(groups);
+            return schema;
+        }).collect(Collectors.toSet());
+    }
+
+    @Override
     public Optional<RelationshipDefinition> retrieveRelationshipDefinition(String name) {
-        throw new RuntimeException("not done");
+        GraphTraversal<Vertex, Vertex> start = traversalSource.V().hasLabel(RELATIONSHIP_DEFINITION_LABEL).has("name", name);
+        Set<RelationshipDefinition> defs = retrieveRelationshipDefinitions(start);
+        if (defs.isEmpty()) {
+            return Optional.empty();
+        } else {
+            return Optional.of(defs.iterator().next());
+        }
     }
 
     @Override
@@ -361,8 +491,8 @@ public class SchemaManagerImpl implements SchemaManager, EntryAddedListener<Stri
         throw new RuntimeException("not done");
     }
 
-    public void signalEntitySchemaChange() {
-        LOG.info("Signaling entity schema change");
+    public void signalSchemaChange() {
+        LOG.info("Signaling schema change");
         String uuid = UUID.randomUUID().toString();
         schemaMap.put(SCHEMA_VERSION_LABEL, uuid);
     }

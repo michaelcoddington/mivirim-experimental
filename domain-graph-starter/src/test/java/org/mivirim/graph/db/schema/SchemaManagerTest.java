@@ -128,7 +128,43 @@ public class SchemaManagerTest {
         } finally {
             management.rollback();
         }
+    }
 
+    @Test
+    @DisplayName("create and retrieve relationship definition")
+    void testCreateRelationshipDefinition() {
+        RelationshipDefinition relationshipDefinition = new RelationshipDefinition();
+        relationshipDefinition.setInstanceMaxCardinality(1);
+        relationshipDefinition.setSourceEntity("Product");
+        relationshipDefinition.setTargetEntity("Cover");
+        relationshipDefinition.setSourceCardinality(new Cardinality(1, 1));
+        relationshipDefinition.setTargetCardinality(new Cardinality(0, null));
+        relationshipDefinition.setSourceVersionAction(RelationshipDefinition.VersionAction.COPY);
+        relationshipDefinition.setTargetVersionAction(RelationshipDefinition.VersionAction.MOVE);
+        relationshipDefinition.setName("has-cover");
+
+        PropertyDefinition propDef1 = new PropertyDefinition();
+        propDef1.setName("prop1");
+        propDef1.setType(PropertyType.STRING);
+
+        PropertyGroupDefinition groupDef = new PropertyGroupDefinition();
+        groupDef.setName("testGroup");
+
+        PropertyDefinition propDef2 = new PropertyDefinition();
+        propDef2.setName("prop2");
+        propDef2.setType(PropertyType.INT);
+
+        groupDef.setProperties(Set.of(propDef2));
+        relationshipDefinition.setPropertyGroups(Set.of(groupDef));
+        relationshipDefinition.setProperties(Set.of(propDef1));
+        schemaManager.createRelationshipDefinition(relationshipDefinition);
+
+        Set<RelationshipDefinition> definitions = schemaManager.retrieveRelationshipDefinitions();
+        assertEquals(1, definitions.size(), "Incorrect number of relationship definitions");
+
+        Optional<RelationshipDefinition> schemaOpt = schemaManager.retrieveRelationshipDefinition(relationshipDefinition.getName());
+        assertTrue(schemaOpt.isPresent(), "Schema not returned");
+        assertEquals(relationshipDefinition, schemaOpt.get());
     }
 
 }

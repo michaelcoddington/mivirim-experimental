@@ -7,8 +7,10 @@ public class LabelConstants {
 
     public static final String REVISION_LABEL = "system:revision";
     public static final String DATA_LABEL = "system:data";
-    public static final String SCHEMA_LABEL = "system:entitySchema";
-    public static final String SCHEMA_PROPERTY_GROUP_LABEL = "system:entitySchemaPropertyGroup";
-    public static final String SCHEMA_PROPERTY_LABEL = "system:entitySchemaProperty";
+
+    public static final String ENTITY_DEFINITION_LABEL = "system:entityDefinition";
+    public static final String RELATIONSHIP_DEFINITION_LABEL = "system:relationshipDefinition";
+    public static final String PROPERTY_GROUP_DEFINITION_LABEL = "system:propertyGroupDefinition";
+    public static final String PROPERTY_DEFINITION_LABEL = "system:propertyDefinition";
 
 }

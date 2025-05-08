@@ -1,9 +1,18 @@
+*) Create relationship schema
+*) Implement relationship mutations
+*) Entity mutation validation during execution
+*) Relationship mutation validation during execution
+*) Binary property on entity
+*) Limit on version record per entity type (e.g., only keep the last 3 versions of a Marketing Cover) by count
+*) Limit on version record per entity type by age (e.g. only keep old versions of a Product for 30 days)
+    *) Or a limit by either one, maybe?  Only the last 3 versions and even then, only for 30 days max?
+
+
 0b) Generate GraphQL fields from Relationship schemas
 3) Generate and publish GraphQL API on schema update
 4) Generate and publish GraphQL API on schema remove
-5) Implement example entity create
 6) Implement example entity retrieve
-7) Implement example entity update
+
 
 8) Gateway:
     a) Publish a graphql list of domains
@@ -13,8 +22,6 @@
 
 OK, next is entity creation and linking
 
-1) Add entity
-2) Update entity
 3) Remove entity
 
 1) Add relationship
