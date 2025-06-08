@@ -1,5 +1,6 @@
 package org.mivirim.graph.db.mutation;
 
+import java.util.Collections;
 import java.util.Set;
 
 public class MutationRequest {
@@ -14,7 +15,7 @@ public class MutationRequest {
     }
 
     public Set<EntityMutation> getEntityMutations() {
-        return entityMutations;
+        return entityMutations == null ? Collections.emptySet() : entityMutations;
     }
 
     public void setEntityMutations(Set<EntityMutation> entityMutations) {
@@ -22,7 +23,7 @@ public class MutationRequest {
     }
 
     public Set<RelationshipMutation> getRelationshipMutations() {
-        return relationshipMutations;
+        return relationshipMutations == null ? Collections.emptySet() : relationshipMutations;
     }
 
     public void setRelationshipMutations(Set<RelationshipMutation> relationshipMutations) {

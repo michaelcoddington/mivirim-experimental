@@ -14,11 +14,17 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.mivirim.graph.cluster.ClusterService;
 import org.mivirim.graph.db.impl.EntityManagerImpl;
+import org.mivirim.graph.db.mutation.EntityCreateMutation;
 import org.mivirim.graph.db.mutation.EntityMutation;
+import org.mivirim.graph.db.mutation.EntityReference;
+import org.mivirim.graph.db.mutation.EntityUpdateMutation;
 import org.mivirim.graph.db.mutation.MutationRequest;
+import org.mivirim.graph.db.mutation.RelationshipMutation;
+import org.mivirim.graph.db.schema.Cardinality;
 import org.mivirim.graph.db.schema.EntityDefinition;
 import org.mivirim.graph.db.schema.PropertyDefinition;
 import org.mivirim.graph.db.schema.PropertyType;
+import org.mivirim.graph.db.schema.RelationshipDefinition;
 import org.mivirim.graph.db.schema.SchemaManager;
 import org.mivirim.graph.db.schema.impl.SchemaManagerImpl;
 import org.mivirim.graph.db.storage.BinaryStorageAdapter;
@@ -30,6 +36,7 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
@@ -41,14 +48,15 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mivirim.graph.db.PropertyConstants.UNIQUE_ID_PROPERTY;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
 
 @DisplayName("An entity manager")
-public class EntityManagerTest {
+public class EntityManagerMutationTest {
 
-    private static final Logger LOG = LoggerFactory.getLogger(EntityManagerTest.class);
+    private static final Logger LOG = LoggerFactory.getLogger(EntityManagerMutationTest.class);
 
     private GraphTraversalSource traversalSource;
     private JanusGraph janusGraph;
@@ -88,7 +96,7 @@ public class EntityManagerTest {
         BinaryStorageAdapter adapter = mock(BinaryStorageAdapter.class);
         EntityManager manager = new EntityManagerImpl(traversalSource, adapter);
 
-        EntityMutation entityMutation = new EntityMutation()
+        EntityMutation entityMutation = new EntityCreateMutation()
                 .entityType("Photo")
                 .stringProperty("name", "photo1.jpg");
         MutationRequest request = new MutationRequest(Set.of(entityMutation), Set.of());
@@ -97,8 +105,8 @@ public class EntityManagerTest {
     }
 
     private void setUpSchema(SchemaManager schemaManager) {
-        EntityDefinition entityDefinition = new EntityDefinition();
-        entityDefinition.setName("Photo");
+        EntityDefinition photoDefinition = new EntityDefinition();
+        photoDefinition.setName("Photo");
 
         PropertyDefinition nameDefinition = new PropertyDefinition("name", PropertyType.STRING, "");
         PropertyDefinition numberDefinition = new PropertyDefinition("number", PropertyType.INT, "");
@@ -106,9 +114,27 @@ public class EntityManagerTest {
         PropertyDefinition dateDefinition = new PropertyDefinition("someDate", PropertyType.DATE, "");
         PropertyDefinition doublePropertyDefinition = new PropertyDefinition("double", PropertyType.DOUBLE, "");
         PropertyDefinition intListDefinition = new PropertyDefinition("intList", PropertyType.INT_LIST, "");
-        entityDefinition.setProperties(Set.of(nameDefinition, numberDefinition, booleanDefinition, dateDefinition, doublePropertyDefinition, intListDefinition));
+        photoDefinition.setProperties(Set.of(nameDefinition, numberDefinition, booleanDefinition, dateDefinition, doublePropertyDefinition, intListDefinition));
 
-        schemaManager.createEntityDefinition(entityDefinition);
+        schemaManager.createEntityDefinition(photoDefinition);
+
+        EntityDefinition photographerDefinition = new EntityDefinition();
+        photographerDefinition.setName("Photographer");
+        PropertyDefinition photographerNameDefinition = new PropertyDefinition("name", PropertyType.STRING, "");
+        photographerDefinition.setProperties(Set.of(photographerNameDefinition));
+        schemaManager.createEntityDefinition(photographerDefinition);
+
+        RelationshipDefinition relationshipDefinition = new RelationshipDefinition();
+        relationshipDefinition.setName("created");
+        relationshipDefinition.setSourceEntity(photographerDefinition.getName());
+        relationshipDefinition.setTargetEntity(photoDefinition.getName());
+        relationshipDefinition.setSourceCardinality(new Cardinality(1, 1));
+        relationshipDefinition.setSourceVersionAction(RelationshipDefinition.VersionAction.COPY);
+        relationshipDefinition.setTargetCardinality(new Cardinality(0, null));
+        relationshipDefinition.setTargetVersionAction(RelationshipDefinition.VersionAction.MOVE);
+        schemaManager.createRelationshipDefinition(relationshipDefinition);
+
+
     }
 
     @Test
@@ -121,7 +147,7 @@ public class EntityManagerTest {
         SchemaManager schemaManager = new SchemaManagerImpl(janusGraph, traversalSource, clusterService);
         setUpSchema(schemaManager);
 
-        EntityMutation entityMutation = new EntityMutation()
+        EntityMutation entityMutation = new EntityCreateMutation()
                 .entityType("Photo")
                 .stringProperty("name", "photo1.jpg");
         MutationRequest request = new MutationRequest(Set.of(entityMutation), Set.of());
@@ -143,7 +169,7 @@ public class EntityManagerTest {
         SchemaManager schemaManager = new SchemaManagerImpl(janusGraph, traversalSource, clusterService);
         setUpSchema(schemaManager);
 
-        EntityMutation entityMutation = new EntityMutation()
+        EntityMutation entityMutation = new EntityCreateMutation()
                 .entityType("Photo")
                 .stringProperty("name", "photo1.jpg");
         MutationRequest request = new MutationRequest(Set.of(entityMutation), Set.of());
@@ -165,7 +191,7 @@ public class EntityManagerTest {
 
         Date now = new Date();
 
-        EntityMutation entityMutation = new EntityMutation()
+        EntityMutation entityMutation = new EntityCreateMutation()
                 .entityType("Photo")
                 .stringProperty("name", "photo1.jpg")
                 .intProperty("number", 5)
@@ -252,20 +278,24 @@ public class EntityManagerTest {
         setUpSchema(schemaManager);
 
         LOG.info("Creating original entity");
-        EntityMutation entityMutation = new EntityMutation()
+        EntityCreateMutation createMutation = new EntityCreateMutation()
                 .entityType("Photo")
                 .stringProperty("name", "photo1.jpg")
                 .intProperty("number", 5);
-        MutationRequest request = new MutationRequest(Set.of(entityMutation), Set.of());
-        Transaction t = manager.executeMutation(request);
+        MutationRequest createRequest = new MutationRequest(Set.of(createMutation), Set.of());
+        Transaction t = manager.executeMutation(createRequest);
         manager.prepare(t);
         manager.commit(t);
 
 
         LOG.info("Updating entity");
         Vertex v = traversalSource.V().hasLabel("Photo").next();
-        entityMutation.id(v.id()).stringProperty("name", "photo2.jpg").intProperty("number", null).booleanProperty("boolean", false);
-        t = manager.executeMutation(request);
+        String uid = (String)v.values(UNIQUE_ID_PROPERTY).next();
+        EntityUpdateMutation entityUpdateMutation = new EntityUpdateMutation()
+                .id(uid)
+                .stringProperty("name", "photo2.jpg").intProperty("number", null).booleanProperty("boolean", false);
+        MutationRequest updateRequest = new MutationRequest(Set.of(entityUpdateMutation), Set.of());
+        t = manager.executeMutation(updateRequest);
         manager.prepare(t);
 
         var checkNodes = Streams.stream(traversalSource.V().valueMap()).toList();
@@ -306,6 +336,68 @@ public class EntityManagerTest {
         assertEquals(List.of(false), v2Props.get("Photo_boolean"));
         assertEquals(List.of("photo2.jpg"), v2Props.get("Photo_name"));
         assertNull(v2Props.get("Photo_number"));
+    }
+
+    @Test
+    @DisplayName("should be able to create and link two new entities")
+    void testAndLinkNewEntities() {
+        BinaryStorageAdapter adapter = mock(BinaryStorageAdapter.class);
+        EntityManager manager = new EntityManagerImpl(traversalSource, adapter);
+        ClusterService clusterService = mock(ClusterService.class);
+        doReturn(mock(IMap.class)).when(clusterService).getMap(anyString());
+        SchemaManager schemaManager = new SchemaManagerImpl(janusGraph, traversalSource, clusterService);
+        setUpSchema(schemaManager);
+
+        EntityCreateMutation photoMutation = new EntityCreateMutation()
+                .entityType("Photo")
+                .refId("photo")
+                .stringProperty("name", "photo1.jpg")
+                .intProperty("number", 5);
+
+        EntityCreateMutation photographerMutation = new EntityCreateMutation()
+                .entityType("Photographer")
+                .refId("photographer")
+                .stringProperty("name", "Bill Smith");
+
+        RelationshipMutation relationshipMutation = new RelationshipMutation()
+                .relationshipType("created")
+                .source(EntityReference.mutationReference("photographer"))
+                .target(EntityReference.mutationReference("photo"));
+
+        MutationRequest request = new MutationRequest(Set.of(photoMutation, photographerMutation), Set.of(relationshipMutation));
+        Transaction t = manager.executeMutation(request);
+        manager.prepare(t);
+        manager.commit(t);
+
+        // now check that the nodes have been created and linked
+        Iterator<Map<String, Object>> testIter = traversalSource.V().hasLabel("Photographer")
+                .project("node", "out")
+                .by(__.elementMap())
+                .by(__.outE()
+                        .unfold()
+                        .project("label", "info")
+                        .by(__.label())
+                        .by(__.project("properties", "target")
+                                .by(__.valueMap())
+                                .by(__.inV().project("id", "label", "props").by(__.id()).by(__.label()).by(__.valueMap()))
+                        )
+                        .group().by("label").by("info")
+
+                );
+        assertTrue(testIter.hasNext(), "did not find node with relationship");
+        Map<String, Object> node = testIter.next();
+        Map<String, Object> outgoingLinks = (Map<String, Object>) node.get("out");
+        List<Map<String, Object>> createdLinks = (List<Map<String, Object>>)outgoingLinks.get("created");
+        assertNotNull(createdLinks, "no created links found");
+        assertEquals(1, createdLinks.size(), "incorrect link count");
+        Map<String, Object> linkInfo = createdLinks.get(0);
+        Map<String, Object> linkProperties = (Map<String, Object>) linkInfo.get("properties");
+        Map<String, Object> target = (Map<String, Object>) linkInfo.get("target");
+        LOG.info("Got target {}", target);
+
+        Map<String, Object> targetProps = (Map<String, Object>) target.get("props");
+        assert(targetProps.containsKey("Photo_name"));
+        assertEquals(List.of("photo1.jpg"), targetProps.get("Photo_name"));
     }
 
 }

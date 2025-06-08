@@ -1,6 +1,7 @@
 package org.mivirim.graph.db.impl;
 
 import com.google.common.collect.Streams;
+import org.apache.tinkerpop.gremlin.process.traversal.P;
 import org.apache.tinkerpop.gremlin.process.traversal.dsl.graph.GraphTraversal;
 import org.apache.tinkerpop.gremlin.process.traversal.dsl.graph.GraphTraversalSource;
 import org.apache.tinkerpop.gremlin.process.traversal.dsl.graph.__;
@@ -12,13 +13,18 @@ import org.mivirim.graph.db.LabelConstants;
 import org.mivirim.graph.db.PropertyConstants;
 import org.mivirim.graph.db.PropertyNameTranslator;
 import org.mivirim.graph.db.Transaction;
+import org.mivirim.graph.db.mutation.EntityCreateMutation;
+import org.mivirim.graph.db.mutation.EntityDeleteMutation;
 import org.mivirim.graph.db.mutation.EntityMutation;
+import org.mivirim.graph.db.mutation.EntityReference;
+import org.mivirim.graph.db.mutation.EntityUpdateMutation;
 import org.mivirim.graph.db.mutation.ListProperty;
 import org.mivirim.graph.db.mutation.MutationRequest;
 import org.mivirim.graph.db.mutation.Property;
+import org.mivirim.graph.db.mutation.RelationshipMutation;
 import org.mivirim.graph.db.mutation.ScalarProperty;
 import org.mivirim.graph.db.query.Query;
-import org.mivirim.graph.db.query.Result;
+import org.mivirim.graph.db.query.QueryResult;
 import org.mivirim.graph.db.storage.BinaryHash;
 import org.mivirim.graph.db.storage.BinaryStorageAdapter;
 import org.slf4j.Logger;
@@ -28,13 +34,17 @@ import org.springframework.stereotype.Service;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.Supplier;
 
 import static org.mivirim.graph.db.LabelConstants.DATA_LABEL;
+import static org.mivirim.graph.db.PropertyConstants.UNIQUE_ID_PROPERTY;
 
 @Service
 public class EntityManagerImpl implements EntityManager {
@@ -114,70 +124,130 @@ public class EntityManagerImpl implements EntityManager {
         var transaction = traversalSource.tx();
         transaction.begin();
 
-        Set<String> uids = new HashSet<>();
-
         GraphTraversal<Vertex, Vertex> traversal = null;
 
-        for (EntityMutation entityMutation : mutationRequest.getEntityMutations()) {
+        List<EntityCreateMutation> createMutations = new ArrayList<>();
+        List<EntityUpdateMutation> updateMutations = new ArrayList<>();
+        List<EntityDeleteMutation> deleteMutations = new ArrayList<>();
+        for (EntityMutation entityMutation: mutationRequest.getEntityMutations()) {
+            switch (entityMutation) {
+                case EntityCreateMutation createMutation: createMutations.add(createMutation); break;
+                case EntityUpdateMutation updateMutation: updateMutations.add(updateMutation); break;
+                case EntityDeleteMutation deleteMutation: deleteMutations.add(deleteMutation); break;
+                default: throw new IllegalArgumentException("Unknown entity mutation: " + entityMutation);
+            }
+        }
+
+        // generates unique IDs for entities
+        Set<String> uids = new HashSet<>();
+        Supplier<String> generateId = () -> {
             String sourceId;
             do {
                 sourceId = UUID.randomUUID().toString();
             } while (uids.contains(sourceId));
 
             uids.add(sourceId);
+            return sourceId;
+        };
 
-            if (entityMutation.getId() == null) {
-                if (traversal == null) {
-                    traversal = traversalSource.addV(entityMutation.getEntityType()).as(sourceId);
-                } else {
-                    traversal = traversal.addV(entityMutation.getEntityType()).as(sourceId);
-                }
+        // used to map mutation references to unique entity IDs
+        HashMap<String, String> referenceToUniqueIdMap = new HashMap<>();
 
-                traversal = traversal.property(PropertyConstants.UNIQUE_ID_PROPERTY, sourceId)
-                        .property(PropertyConstants.VERSION_PROPERTY, 1)
-                        .property(PropertyConstants.STATUS_PROPERTY, EntityStatus.UNCOMMITTED.toString())
-                        .property(PropertyConstants.TRANSACTION_ID_PROPERTY, t.getId());
-                traversal = applyMutations(traversal, entityMutation);
-            } else {
-                String targetLabel = "target";
-                if (traversal == null) {
-                    traversal = traversalSource.V(entityMutation.getId()).as(targetLabel);
-                } else {
-                    traversal = traversal.V(entityMutation.getId()).as(targetLabel);
-                }
-                traversal = traversal.addV(LabelConstants.REVISION_LABEL)
-                        .property(PropertyConstants.TRANSACTION_ID_PROPERTY, t.getId())
-                        .property(PropertyConstants.UNIQUE_ID_PROPERTY, sourceId)
-                        .as(sourceId);
+        // creates
+        for (EntityCreateMutation createMutation: createMutations) {
+            String uid = generateId.get();
 
-                Set<String> deletedProperties = new HashSet<>();
-                for (Property property : entityMutation.getProperties()) {
-                    String translatedPropertyName = PropertyNameTranslator.externalPropertyNameToInternalName(entityMutation.getEntityType(), property.getName());
-                    if (property instanceof ScalarProperty<?, ?> scalarProperty) {
-                        LOG.info("Applying scalar property {}", translatedPropertyName);
-                        if (scalarProperty.getValue() == null) {
-                            deletedProperties.add(translatedPropertyName);
-                        } else {
-                            traversal = traversal.property(translatedPropertyName, scalarProperty.getValue());
-                        }
-                    } else if (property instanceof ListProperty<?> listProperty) {
-                        LOG.info("Applying list property {}", translatedPropertyName);
-                        if (listProperty.getValues() == null || listProperty.getValues().isEmpty()) {
-                            deletedProperties.add(translatedPropertyName);
-                        } else {
-                            for (Object value : listProperty.getValues()) {
-                                traversal = traversal.property(VertexProperty.Cardinality.list, translatedPropertyName, value);
-                            }
-                        }
-                    } else {
-                        throw new IllegalArgumentException("Unsupported property type: " + property.getClass());
-                    }
-                }
-                for (String deletedProperty : deletedProperties) {
-                    traversal = traversal.property(PropertyConstants.DELETED_PROPERTY_NAME, deletedProperty);
-                }
-                traversal = traversal.addE(LabelConstants.IS_REVISION_OF_LABEL).from(sourceId).to(targetLabel).outV();
+            if (createMutation.getRefId() != null) {
+                referenceToUniqueIdMap.put(createMutation.getRefId(), uid);
             }
+
+            if (traversal == null) {
+                traversal = traversalSource.addV(createMutation.getEntityType()).as(uid);
+            } else {
+                traversal = traversal.addV(createMutation.getEntityType()).as(uid);
+            }
+
+            traversal = traversal.property(UNIQUE_ID_PROPERTY, uid)
+                    .property(PropertyConstants.VERSION_PROPERTY, 1)
+                    .property(PropertyConstants.STATUS_PROPERTY, EntityStatus.UNCOMMITTED.toString())
+                    .property(PropertyConstants.TRANSACTION_ID_PROPERTY, t.getId());
+            traversal = applyProperties(traversal, createMutation.getEntityType(), createMutation);
+        }
+
+        // updates
+        List<String> updateIds = updateMutations.stream().map(EntityUpdateMutation::getId).toList();
+        Map<String, String> vertexIdToLabelMap = new HashMap<>();
+        Iterator<Map<String, Object>> iter = traversalSource.V()
+                .has(UNIQUE_ID_PROPERTY, P.within(updateIds))
+                .project("id", "label")
+                .by(__.values(UNIQUE_ID_PROPERTY))
+                .by(__.label());
+        while (iter.hasNext()) {
+            Map<String, Object> row = iter.next();
+            vertexIdToLabelMap.put(row.get("id").toString(), row.get("label").toString());
+        }
+
+        for (EntityUpdateMutation updateMutation: updateMutations) {
+            String label = vertexIdToLabelMap.get(updateMutation.getId());
+            String uid = generateId.get();
+
+            if (updateMutation.getRefId() != null) {
+                referenceToUniqueIdMap.put(updateMutation.getRefId(), updateMutation.getId());
+            }
+
+            String targetLabel = "target";
+            if (traversal == null) {
+                traversal = traversalSource.V().has(UNIQUE_ID_PROPERTY, updateMutation.getId()).as(targetLabel);
+            } else {
+                traversal = traversal.V().has(UNIQUE_ID_PROPERTY, updateMutation.getId()).as(targetLabel);
+            }
+            traversal = traversal.addV(LabelConstants.REVISION_LABEL)
+                    .property(PropertyConstants.TRANSACTION_ID_PROPERTY, t.getId())
+                    .property(UNIQUE_ID_PROPERTY, uid)
+                    .as(uid);
+
+            // TODO this is pretty redundant with applyProperties below
+            Set<String> deletedProperties = new HashSet<>();
+            for (Property property : updateMutation.getProperties()) {
+                String translatedPropertyName = PropertyNameTranslator.externalPropertyNameToInternalName(label, property.getName());
+                if (property instanceof ScalarProperty<?, ?> scalarProperty) {
+                    LOG.info("Applying scalar property {}", translatedPropertyName);
+                    if (scalarProperty.getValue() == null) {
+                        deletedProperties.add(translatedPropertyName);
+                    } else {
+                        traversal = traversal.property(translatedPropertyName, scalarProperty.getValue());
+                    }
+                } else if (property instanceof ListProperty<?> listProperty) {
+                    LOG.info("Applying list property {}", translatedPropertyName);
+                    if (listProperty.getValues() == null || listProperty.getValues().isEmpty()) {
+                        deletedProperties.add(translatedPropertyName);
+                    } else {
+                        for (Object value : listProperty.getValues()) {
+                            traversal = traversal.property(VertexProperty.Cardinality.list, translatedPropertyName, value);
+                        }
+                    }
+                } else {
+                    throw new IllegalArgumentException("Unsupported property type: " + property.getClass());
+                }
+            }
+            for (String deletedProperty : deletedProperties) {
+                traversal = traversal.property(PropertyConstants.DELETED_PROPERTY_NAME, deletedProperty);
+            }
+            traversal = traversal.addE(LabelConstants.IS_REVISION_OF_LABEL).from(uid).to(targetLabel).outV();
+        }
+
+        // deletes
+
+
+        // relationships
+        for (RelationshipMutation relationshipMutation : mutationRequest.getRelationshipMutations()) {
+            EntityReference source = relationshipMutation.getSource();
+            EntityReference target = relationshipMutation.getTarget();
+
+            String sourceId = referenceToUniqueIdMap.get(source.getId());
+            String targetId = referenceToUniqueIdMap.get(target.getId());
+
+            traversal = traversal.addE(relationshipMutation.getRelationshipType()).from(__.V().has(UNIQUE_ID_PROPERTY, sourceId)).to(__.V().has(UNIQUE_ID_PROPERTY, targetId)).outV();
         }
 
         while (traversal != null && traversal.hasNext()) {
@@ -244,7 +314,7 @@ public class EntityManagerImpl implements EntityManager {
                     __.select(revisionLabel).properties().as(revisionPropsId).select(newLabel).property(__.select(revisionPropsId).key(), __.select(revisionPropsId).value())
             );
 
-            traversal = traversal.property(PropertyConstants.UNIQUE_ID_PROPERTY, __.select(revisionLabel).values(PropertyConstants.UNIQUE_ID_PROPERTY));
+            traversal = traversal.property(UNIQUE_ID_PROPERTY, __.select(revisionLabel).values(UNIQUE_ID_PROPERTY));
             traversal = traversal.property(PropertyConstants.VERSION_PROPERTY, __.select(currentLabel).values(PropertyConstants.VERSION_PROPERTY).math("_ + 1"));
             traversal = traversal.property(PropertyConstants.STATUS_PROPERTY, EntityStatus.UNCOMMITTED.toString());
             for (String deletedProperty : deletedProperties) {
@@ -266,9 +336,9 @@ public class EntityManagerImpl implements EntityManager {
         LOG.info("Prepared transaction {} in {} ms", transaction.getId(), (new Date().getTime() - now) / 1000);
     }
 
-    private GraphTraversal<Vertex, Vertex> applyMutations(GraphTraversal<Vertex, Vertex> traversal, EntityMutation entityMutation) {
+    private GraphTraversal<Vertex, Vertex> applyProperties(GraphTraversal<Vertex, Vertex> traversal, String entityType, EntityCreateMutation entityMutation) {
         for (Property property : entityMutation.getProperties()) {
-            String translatedPropertyName = PropertyNameTranslator.externalPropertyNameToInternalName(entityMutation.getEntityType(), property.getName());
+            String translatedPropertyName = PropertyNameTranslator.externalPropertyNameToInternalName(entityType, property.getName());
             if (property instanceof ScalarProperty<?, ?> scalarProperty) {
                 LOG.info("Applying scalar property {}", translatedPropertyName);
                 traversal = traversal.property(translatedPropertyName, scalarProperty.getValue());
@@ -316,7 +386,7 @@ public class EntityManagerImpl implements EntityManager {
     }
 
     @Override
-    public Result executeQuery(Query query) {
+    public QueryResult executeQuery(Query query) {
         throw new RuntimeException("Not implemented yet");
     }
 }

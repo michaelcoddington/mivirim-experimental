@@ -153,4 +153,50 @@ public class ExperimentsTest {
         LOG.info("Got new props {}", newProps);
     }
 
+    @Test
+    void testNodeProperty() {
+        var newGraph = JanusGraphFactory.build()
+                .set("storage.backend", "inmemory")
+                .open();
+
+        var traversal = newGraph.traversal();
+        var tx = traversal.tx();
+        tx.begin();
+
+        traversal
+                .addV("Cover").as("cover")
+                .property("name", "Test cover")
+                .addV("system:data").as("data")
+                .property("dataprop", "testdatavalue")
+                .property("sha1hash", "abc123")
+                .addV("system:data").as("thumbnail")
+                .property("md5hash", "xyz")
+                .addE("system:nodeProperty")
+                .property("propertyName", "data")
+                .from("cover").to("data")
+                .addE("system:nodeProperty")
+                .property("propertyName", "thumbnail")
+                .from("cover").to("thumbnail")
+
+                .iterate();
+
+        tx.commit();
+        tx.close();
+
+        var testResult = traversal.V().hasLabel("Cover")
+                .project("properties", "nodeProps")
+                .by(__.valueMap())
+                .by(__.outE("system:nodeProperty")
+                        .project("name", "vertex")
+                        .by(__.values("propertyName"))
+                        .by(__.inV().project("id", "label", "properties").by(__.id()).by(__.label()).by(__.valueMap()))
+                        .group()
+                        .by("name")
+                        .by(__.select("vertex"))
+                )
+                .next();
+
+        LOG.info("Got test result {}", testResult);
+    }
+
 }

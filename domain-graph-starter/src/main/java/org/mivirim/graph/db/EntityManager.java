@@ -3,7 +3,7 @@ package org.mivirim.graph.db;
 import org.mivirim.graph.db.impl.HashingBinaryDataWriter;
 import org.mivirim.graph.db.mutation.MutationRequest;
 import org.mivirim.graph.db.query.Query;
-import org.mivirim.graph.db.query.Result;
+import org.mivirim.graph.db.query.QueryResult;
 
 import java.io.IOException;
 
@@ -40,6 +40,6 @@ public interface EntityManager {
 
     void abort(Transaction transaction);
 
-    Result executeQuery(Query query);
+    QueryResult executeQuery(Query query);
 
 }

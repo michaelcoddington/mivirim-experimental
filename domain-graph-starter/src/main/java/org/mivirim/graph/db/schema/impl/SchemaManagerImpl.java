@@ -370,41 +370,45 @@ public class SchemaManagerImpl implements SchemaManager, EntryAddedListener<Stri
         AtomicInteger vertexCount = new AtomicInteger(0);
 
         // add direct properties
-        for (PropertyDefinition p : definition.getProperties()) {
-            String ref = String.valueOf(vertexCount.getAndIncrement());
-
-            traversal = traversal.addV(LabelConstants.PROPERTY_DEFINITION_LABEL)
-                    .property("name", p.getName())
-                    .property("description", p.getDescription())
-                    .property("type", p.getType().toString())
-                    .as(ref);
-            traversal = traversal.addE("has-property")
-                    .from("schema").to(ref);
-        }
-
-        // add property groups
-        Set<PropertyGroupDefinition> propertyGroups = definition.getPropertyGroups() == null ? Set.of() : definition.getPropertyGroups();
-
-        for (PropertyGroupDefinition groupDefinition : propertyGroups) {
-            String groupRef = String.valueOf(vertexCount.getAndIncrement());
-
-            traversal = traversal.addV(LabelConstants.PROPERTY_GROUP_DEFINITION_LABEL)
-                    .property("name", groupDefinition.getName())
-                    .property("description", groupDefinition.getDescription())
-                    .as(groupRef);
-            traversal = traversal.addE("has-property-group")
-                    .from("schema").to(groupRef);
-
-            for (PropertyDefinition groupPropertyDef : groupDefinition.getProperties()) {
+        if (definition.getProperties() != null) {
+            for (PropertyDefinition p : definition.getProperties()) {
                 String ref = String.valueOf(vertexCount.getAndIncrement());
 
                 traversal = traversal.addV(LabelConstants.PROPERTY_DEFINITION_LABEL)
-                        .property("name", groupPropertyDef.getName())
-                        .property("description", groupPropertyDef.getDescription())
-                        .property("type", groupPropertyDef.getType().toString())
+                        .property("name", p.getName())
+                        .property("description", p.getDescription())
+                        .property("type", p.getType().toString())
                         .as(ref);
                 traversal = traversal.addE("has-property")
-                        .from(groupRef).to(ref);
+                        .from("schema").to(ref);
+            }
+        }
+
+        // add property groups
+        if (definition.getPropertyGroups() != null) {
+            Set<PropertyGroupDefinition> propertyGroups = definition.getPropertyGroups() == null ? Set.of() : definition.getPropertyGroups();
+
+            for (PropertyGroupDefinition groupDefinition : propertyGroups) {
+                String groupRef = String.valueOf(vertexCount.getAndIncrement());
+
+                traversal = traversal.addV(LabelConstants.PROPERTY_GROUP_DEFINITION_LABEL)
+                        .property("name", groupDefinition.getName())
+                        .property("description", groupDefinition.getDescription())
+                        .as(groupRef);
+                traversal = traversal.addE("has-property-group")
+                        .from("schema").to(groupRef);
+
+                for (PropertyDefinition groupPropertyDef : groupDefinition.getProperties()) {
+                    String ref = String.valueOf(vertexCount.getAndIncrement());
+
+                    traversal = traversal.addV(LabelConstants.PROPERTY_DEFINITION_LABEL)
+                            .property("name", groupPropertyDef.getName())
+                            .property("description", groupPropertyDef.getDescription())
+                            .property("type", groupPropertyDef.getType().toString())
+                            .as(ref);
+                    traversal = traversal.addE("has-property")
+                            .from(groupRef).to(ref);
+                }
             }
         }
 
